@@ -26,9 +26,9 @@ team_df <- dplyr::tibble(Teams) %>%
 ## -----------------------------------------------------------------------------------
 rc_df <- team_df %>%
   mutate(., HBP = if_else(is.na(HBP), 0, as.numeric(HBP)),
-        X1B = H - X2B - X3B - HR, #singles
-        TB = X1B + 2*X2B + 3*X3B + 4*HR, #total bases
-        RC = (H + BB + HBP)*TB/(AB + BB + HBP))
+         X1B = H - X2B - X3B - HR, #singles
+         TB = X1B + 2*X2B + 3*X3B + 4*HR, #total bases
+         RC = (H + BB + HBP)*TB/(AB + BB + HBP))
 
 
 ## -----------------------------------------------------------------------------------
@@ -42,7 +42,8 @@ p + geom_point(col = "#6e0000", alpha = .15) +
 
 ## -----------------------------------------------------------------------------------
 rc_df %>%
-  dplyr::filter(., yearID == "2000")
+  dplyr::filter(., yearID == "2019", teamID == "COL") %>% 
+  dplyr::select(., R, RC)
 
 
 ## -----------------------------------------------------------------------------------
@@ -758,30 +759,43 @@ arenado_pred <- arenado_pred %>%
 arenado_pred
 
 ## Spin Rates in 2021
-tyler_id <- baseballr::playerid_lookup(last_name = "Anderson", 
-                                       first_name = "Tyler")
 
-df_tyler <- scrape_statcast_savant_pitcher(start_date = ymd("2021-03-28"), 
-                                           end_date = ymd("2021-07-20"), 
-                                           pitcherid = 542881)
+cole_id <- baseballr::playerid_lookup(last_name = "Cole", 
+                                       first_name = "Gerrit") %>% 
+  dplyr::pull(mlbam_id)
+df_cole <- scrape_statcast_savant_pitcher(start_date = ymd("2021-03-28"), 
+                                          end_date = ymd("2021-07-22"), 
+                                          pitcherid = cole_id)
 
-p <-  df_tyler %>%
+p <-  df_cole %>%
+  dplyr::filter(., pitch_type != "SI") %>% 
   ggplot(aes(x = pitch_type, y = release_spin_rate, fill = pitch_type))
 
 p + geom_violin(alpha = 0.8, color = "black") + 
-  scale_fill_brewer("type", palette = "Dark2") +
-  labs(title = "Tyler Anderson's Spin Rate in 2021",
+  scale_fill_brewer("pitch type", palette = "Set1") +
+  labs(title = "Gerrit Cole's Spin Rate in 2021",
        x = "pitch type",
        y = "spin rate") +
   coord_flip() +
+  guides(fill = "none") +
   theme_bw()
+ggsave("fig/chap-05/gc-spin-rate-full.png", height = 8, width = 8)
 
-df_tyler %>% 
+df_cole %>% 
   group_by(pitch_type) %>% 
   summarize(n = n())
 ## Look at before/after change
+
+df_tyler %>%
+  dplyr::filter(pitch_type != "SI") %>% 
+  dplyr::mutate(before = ifelse(lubridate::ymd(game_date) <= 
+                                  lubridate::ymd("2021-06-14"),
+                                TRUE, FALSE)) %>% 
+  dplyr::group_by(pitch_type, before) %>% 
+  dplyr::summarize(n = n())
+
 p <-  df_tyler %>%
-  dplyr::filter(pitch_type %in% c("CH", "FC", "FF", "SI")) %>% 
+  dplyr::filter(pitch_type != "SI") %>% 
   dplyr::mutate(before = ifelse(lubridate::ymd(game_date) <= 
                                   lubridate::ymd("2021-06-14"),
                                 TRUE, FALSE)) %>% 
@@ -791,9 +805,46 @@ p + geom_density(alpha = 0.8, color = "black") +
   scale_fill_brewer("sticky?", palette = "Set1") +
   scale_x_continuous(breaks = seq(1500, 3000, by = 250)) +
   facet_wrap(~ pitch_type, ncol = 2) +
-  labs(title = "Tyler Anderson's Spin Rate in 2021",
+  labs(title = "Gerrit Cole's Spin Rate in 2021",
        x = "spin rate") +
   theme_bw()
 
-ggsave("fig/chap-05/ta-spin-rate.png")
+ggsave("fig/chap-05/gc-spin-rate.png", height = 9, width = 8)
 
+p <-  df_tyler %>%
+  dplyr::filter(pitch_type != "SI") %>% 
+  dplyr::mutate(before = ifelse(lubridate::ymd(game_date) <= 
+                                  lubridate::ymd("2021-06-14"),
+                                TRUE, FALSE)) %>% 
+  ggplot(aes(x = release_speed, fill = before))
+
+p + geom_density(alpha = 0.8, color = "black") + 
+  scale_fill_brewer("sticky?", palette = "Set1") +
+  facet_wrap(~ pitch_type, ncol = 2) +
+  labs(title = "Gerrit Cole's Release Speed in 2021",
+       x = "release speed") +
+  theme_bw()
+
+ggsave("fig/chap-05/gc-release-speed.png", height = 9, width = 8)
+
+df_cole <- scrape_statcast_savant_pitcher(start_date = ymd("2021-03-28"), 
+                                          end_date = ymd("2021-07-23"), 
+                                          pitcherid = cole_id)
+
+df_cole <- df_cole %>%
+  dplyr::group_by(., game_date, pitch_type) %>% 
+  dplyr::summarize(., asp = mean(release_spin_rate))
+
+p <- df_cole %>% 
+  dplyr::filter(., pitch_type != "SI") %>% 
+  ggplot(aes(x = game_date, y = asp, col = pitch_type))
+
+p + geom_line() +
+  geom_point() +
+  scale_color_brewer("pitch type", palette = "Set1") +
+  scale_y_continuous(breaks = seq(1500, 3000, by = 250)) +
+  labs(title = "Gerrit Cole's Spin Rate in 2021",
+       x = "date",
+       y = "spin rate") +
+  theme_bw()
+ggsave("fig/chap-05/gc-release-speed-by-date.png", height = 6, width = 8.5)
