@@ -80,7 +80,7 @@ Teams %>%
 
 ## ---- include = FALSE---------------------------------------------------------------
 df_batting <- tibble(Batting) %>%
-  filter(yearID >= 2000, yearID <= 2006, AB >= 100)
+  filter(yearID >= 2000, AB >= 100)
 
 
 ## -----------------------------------------------------------------------------------
@@ -92,10 +92,8 @@ p + geom_point(col = "#6e0000") +
 
 
 ## -----------------------------------------------------------------------------------
-df_bat_simple <- df_batting %>%
-  select(.,R, HR)
 lm_batting_1 <- lm(R ~ HR,
-                   data = df_bat_simple)
+                   data = df_batting)
 summary(lm_batting_1)
 
 
@@ -104,12 +102,15 @@ confint(lm_batting_1, level = .99)
 
 
 ## -----------------------------------------------------------------------------------
-df_batting_new <- df_bat_simple %>%
+df_batting_new <- df_batting %>%
   mutate(pred_R = predict(lm_batting_1))
-head(df_batting_new)
 
 
 ## -----------------------------------------------------------------------------------
+new_data <- data.frame(R = c(NA, NA),
+                       HR = c(30, 15))
+predict(lm_batting_1, newdata = new_data, interval = "confidence")
+
 new_data <- data.frame(R = c(NA, NA),
                        HR = c(30, 15))
 predict(lm_batting_1, newdata = new_data, interval = "confidence")
