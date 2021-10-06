@@ -14,6 +14,7 @@ library(tidyverse)
 library(nflfastR)
 library(mgcv)
 library(NFLSimulatoR)
+library(teamcolors)
 ```
 
 ## Play-by-Play Data
@@ -467,4 +468,149 @@ Look at the percentage of passes/runs.
 group_by(drives_pr, play_type) %>% 
   summarize(n = n())
 ```
+
+## Win Probabilities
+
+How about everybody's favorite, win probabilities? Let's look at an AFC playoff
+game between the Houston Texans versus the Kansas City Chiefs from the 2019 
+season. The Chiefs were at home and fell behind to the Texans by a score of 
+24 - 0 at around two minutes into the second quarter. The Chiefs came back to win 
+the game 31 - 51. As the saying goes, that's why they play four quarters. Win 
+probabilities are computed as the game evolves and are given in the `wp` field. 
+Load the `nfl_playoffs_pbp` data frame that is contained in the textbook's R
+package.
+
+```{r}
+nfl_playoffs_pbp <- readRDS(file = "../data/nfl-pbp-playoffs-19-20.rds")
+
+g1 <- nfl_playoffs_pbp %>%
+  dplyr::filter(., home_team == "KC", away_team == "HOU") %>%
+  dplyr::select(., game_seconds_remaining, away_wp, away_wp_post, home_wp, 
+                home_wp_post, wp, desc)
+p <- ggplot(data = g1,
+            aes(x = 3600 - game_seconds_remaining, 
+                y = home_wp))
+p + geom_line() +
+  geom_point() +
+  labs(x = "game time (seconds)",
+       y = "home team win probability") +
+  theme_minimal()
+```
+
+Wait a second, we can make this plot look a lot better. Check this out using the
+`teamcolors` package created by Greg Matthews and Ben Baumer. This package 
+references [Jim Nielsen's team colors site](http://jim-nielsen.com/teamcolors/) 
+website.
+
+```{r}
+tc <- teamcolors %>%
+  dplyr::filter(., name %in% c("Kansas City Chiefs", "Houston Texans")) %>%
+  dplyr::mutate(., team = c("HOU", "KC")) 
+## Note the single = because this is an assignment and not a logical comparison
+##  as in a filter or select.
+
+g1 <- nfl_playoffs_pbp %>%
+  dplyr::filter(., home_team == "KC", away_team == "HOU") %>%
+  dplyr::select(., game_seconds_remaining, away_wp, away_wp_post, home_wp, 
+                home_wp_post, wp, desc) %>%
+  dplyr::mutate(., team = if_else(home_wp < .5, "HOU", "KC")) %>%
+  dplyr::left_join(tc, by = "team") %>%
+  na.omit()
+
+p <- ggplot(data = g1,
+            aes(x = 3600 - game_seconds_remaining, 
+                y = home_wp,
+                col = name))
+p + geom_line(col = "darkgrey", linetype = 2) +
+  geom_point() +
+  scale_color_teams(name = "name") +
+  scale_y_continuous(limits = c(0, 1)) +
+  scale_x_continuous(limits = c(0, 3600),
+                     breaks = seq(0, 3600, by = 900),
+                     labels = c("Q1", "Q2", "Q3", "Q4", "FT")) +
+  labs(
+    x = "time in game (s)",
+    y = "KC win probability"
+  ) +
+  guides(col = F) +
+  theme_minimal()
+```
+
+Alternatively, you can just pull in a single game doing something like:
+
+```{r}
+week_9_ids <- nflfastR::fast_scraper_schedules(2019) %>% 
+  dplyr::filter(., week == 9)
+```
+
+```{r}
+tc <- teamcolors %>%
+  dplyr::filter(., name %in% c("Denver Broncos", "Cleveland Browns")) %>%
+  dplyr::mutate(., team = if_else(name == "Denver Broncos", "DEN", "CLE"))
+
+cle_at_den_pbp <- week_9_ids %>%
+  dplyr::filter(home_team == "DEN") %>%
+  dplyr::pull(game_id) %>% ## The game id is piped into the scrape json function
+  nflfastR::fast_scraper() 
+
+cle_at_den_pbp_tc <- cle_at_den_pbp %>%
+  dplyr::mutate(., team = if_else(home_wp < .5, "CLE", "DEN")) %>%
+  dplyr::left_join(., tc, by = "team") %>%
+  dplyr::filter(., !is.na(team))
+
+p <- ggplot(data = cle_at_den_pbp_tc,
+            aes(x = 3600 - game_seconds_remaining, 
+                y = home_wp,
+                col = name))
+p + geom_line(col = "darkgrey", linetype = 2) +
+  geom_point() +
+  scale_color_teams() +
+  scale_y_continuous(limits = c(0, 1)) +
+  scale_x_continuous(limits = c(0, 3600),
+                     breaks = seq(0, 3600, by = 900),
+                     labels = c("Q1", "Q2", "Q3", "Q4", "FT")) +
+  labs(
+    x = "time in game (s)",
+    y = "DEN win probability",
+    title = "Win Probability: CLE @ DEN",
+    caption = "Data courtesy of NFL API (nflfastR and teamcolors)"
+  ) +
+  guides(col = F) +
+  theme_bw()
+```
+
+
+
+```{r}
+cle_at_den_pbp_tc <- cle_at_den_pbp %>%
+  dplyr::mutate(home_team_color = teamcolors %>%
+                  dplyr::filter(., name == "Denver Broncos") %>%
+                  dplyr::pull(primary),
+                away_team_color = teamcolors %>%
+                  dplyr::filter(., name == "Cleveland Browns") %>%
+                  dplyr::pull(primary)) %>%
+  dplyr::filter(., !is.na(home_wp))
+
+p <- ggplot(data = cle_at_den_pbp_tc,
+            aes(x = 3600 - game_seconds_remaining, 
+                y = home_wp))
+p + geom_line(color = cle_at_den_pbp_tc$home_team_color[1]) +
+  geom_line(aes(x = 3600 - game_seconds_remaining, 
+                y = away_wp),
+            color = cle_at_den_pbp_tc$away_team_color[1]) +
+  scale_y_continuous(limits = c(0, 1)) +
+  scale_x_continuous(limits = c(0, 3600),
+                     breaks = seq(0, 3600, by = 900),
+                     labels = c("Q1", "Q2", "Q3", "Q4", "FT")) +
+  labs(
+    x = "time in game (s)",
+    y = "win probability",
+    title = "Win Probability: CLE @ DEN",
+    caption = "Data courtesy of NFL API (nflfastR and teamcolors)"
+  ) +
+  guides(col = F) +
+  theme_bw()
+```
+
+
 
