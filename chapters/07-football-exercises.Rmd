@@ -14,446 +14,184 @@ library(tidyverse)
 library(nflfastR)
 library(mgcv)
 library(NFLSimulatoR)
+library(lubridate)
 ```
 
-## Play-by-Play Data
 
-Every play in the NFL going back to 1999 can be obtained using the `nflfastR`
-project. It's super simple to download and very handy for analysis. We will rely 
-on a subset of these data (2009 - 2020 seasons) in this chapter and the following code
-shows how to obtain them. There are 370 variables related to every single play
-in the NFL. 
+### Problem 1
 
-```{r, eval = F}
-seasons <- 2009:2020
-df <- nflfastR::load_pbp(seasons)
-```
+Using the field goals data set, fit a glm and a gam that uses 
+`fg_distance`, `game_seconds_remaining`, and `year` as predictor variables for 
+success. Note that you will need to use `mutate()` in order to create a new
+variable `year`. See `?year` from the `lubridate` package.
 
-### Field Goals
+### Answer 1
 
-The `play_type` field tells you when FGs were attempted during the game. How do
-we know whether or not the FG was successful? Load the `field_goals` data frame that 
-is included in this book's R package. Note that we subset the full play-by-play 
-data set by filtering on the `play_type` variable and selecting a host of relevant 
-variables. Furthermore, we define `success` and `fg_distance` variables to denote
-the result of the field goal attempt and official field goal distance, respectively.
-
-```{r, eval = F}
-df <- readRDS("../data/play-by-play-data.rds")
-field_goals <- df %>%
-  dplyr::filter(., play_type == "field_goal") %>%
-  dplyr::select(., game_date, time, down, yrdln, ydstogo, yardline_100, posteam, 
-                defteam, field_goal_result, field_goal_attempt,
-                game_seconds_remaining, ep, contains("prob")) %>% 
-  dplyr::mutate(., success = ifelse(field_goal_result == "made", 1, 0),
-                  fg_distance = yardline_100 + 17) %>% 
-  na.omit()
-saveRDS(field_goals, "../data/field-goals.rds")
-```
-
-### First Downs
-
-In addition, we include a subset of the play-by-play data that only includes 
-first down plays with ten yards to go in the R package (`first_downs`). We will 
-use this to illustrate basic expected value-based decision making. 
-
-```{r, eval = F}
-first_downs <- df %>%
-  dplyr::filter(., down == 1, ydstogo == 10, ep != 0)
-saveRDS(first_downs, "../data/first-downs.rds")
-```
-
-## First Down Expected Probability
-
-```{r}
+```{r, include = F, cache = TRUE, warning = FALSE}
 field_goals <- readRDS("../data/field-goals.rds")
-first_downs <- readRDS("../data/first-downs.rds")
-```
-
-## Field Goal vs. Distance
-
-First look at just distance, and then look at density by success.
-```{r}
-p <- ggplot(data = field_goals,
-            aes(x = fg_distance, fill = as.factor(success)))
-p + geom_density(alpha = .25) + 
-  scale_fill_brewer("success", palette = "Set1") +
-  labs(x = "distance")
-```
-
-What type of model is most approriate to use in predicting field goal success?
-
-```{r}
-fg_glm <- glm(success ~ fg_distance,
-              family = "binomial",
-              data = field_goals)
-summary(fg_glm)
-```
-
-How do we interpret the "slope" parameter? Recall that if $\beta_1 < 0$, then
-the probability of success (i.e., field goal is good) *decreases* as distance
-(x) increases. What is the magnitude of this increase?
-
-```{r}
-p <- ggplot(data = field_goals,
-            aes(x = fg_distance, y = success))
-p + geom_point(alpha = .1) +
-  geom_smooth(method = "glm", method.args = list(family = "binomial")) +
-  labs(x = "distance",
-       y = "probability of successful field goal")
-```
-
-## Nonparametric Model
-
-```{r}
-fg_gam <- gam(success ~ s(fg_distance),
-              family = "binomial",
-              data = field_goals)
-summary(fg_gam)
-```
-
-Compare the AIC/BIC values:
-
-```{r}
-AIC(fg_glm)
-AIC(fg_gam)
-BIC(fg_glm)
-BIC(fg_gam)
-```
-
-It's not clear which (glm or gam) is the better fit. How does this model 
-compare to the probabilities given in nflscrapr?
-
-```{r}
-field_goals <- mutate(field_goals, 
-                  glm_pred = predict(fg_glm, type = "response"),
-                  gam_pred = predict(fg_gam, type = "response"))
 ```
 
 ```{r}
-p <- ggplot(data = field_goals,
-            aes(x = gam_pred, y = fg_prob))
-p + geom_point(alpha = .25, col = "#6e0000") +
-  geom_smooth(col = "black") +
-  labs(x = "our model", 
-       y = "nflfastr model")
+tt <- glm(success ~ fg_distance + game_seconds_remaining + year(game_date),
+          data = field_goals, 
+          family = "binomial")
+summary(tt)
 ```
 
-## By Distance
+### Problem 2
 
-Look at the fits for the glm and the gam, relative to the nfl.com model. 
-What do you think they are using?
+Is `game_seconds_remaining` significant? If not, refit the model using both a 
+glm and gam approach. 
+
+### Answer 2
+
+The p-value associated with the `game_seconds_remaining` variable is 0.51 and,
+therefore, is not significant as a predictor for predicting the probability of success.
 
 ```{r}
-p <- ggplot(data = field_goals,
-            aes(x = fg_distance, y = fg_prob))
-p + geom_point(col = "#6e0000", alpha = .25) +
-  geom_smooth(col = "black") +
-  geom_smooth(aes(x = fg_distance, y = glm_pred), col = "navy") +
-  geom_smooth(aes(x = fg_distance, y = gam_pred), col = "forestgreen") +
-  labs(x = "distance",
-       y = "probability")
-
+tt <- glm(success ~ fg_distance + year,
+          data = field_goals %>%
+            mutate(year = year(game_date)), 
+          family = "binomial")
+summary(tt)
 ```
 
-## Decision Making
 
-Suppose we are faced with fourth down and two yards to go from the 33 yard 
-line? Should we kick the field goal? This analysis follows (sort of) Chapters
-20 and 21 in the Mathletics textbook. 
+### Problem 3
 
-Questions?
+Using the "best" model from Problem 2, compare your estimates of the probability
+of successfully making a field goal by distance for the years 2009 and 2020. 
 
-1. What is the distance of the kick? Roughly 50 yards. 
-2. Given the distance, what is the probability of making the kick?
+### Answer 3
 
 ```{r}
-predict(fg_glm, newdata = tibble(fg_distance = 50),
-        type = "response")
-predict(fg_gam, newdata = tibble(fg_distance = 50),
-        type = "response")
-```
-For the sake of argument, let's say that the probability is 0.65. A crude
-estimate of the expected points of this action is 0.65*3 = 1.95. A better
-estimate is to use the model given on `nflfastR` that takes into account all 
-possible outcomes, and this is 1.40. 
+new_data <- data.frame(fg_distance = rep(8:60, times = 2),
+                       year = rep(c(2009, 2020), each = 53))
+preds <- predict(tt, newdata = new_data, type = "response")
 
-```{r}
-filter(field_goals, fg_distance == 50) %>% 
-  summarize(m = mean(ep))
+new_data <- new_data %>%
+  mutate(pred_success = preds)
+
+p <- ggplot(data = new_data,
+            aes(x = fg_distance, preds, col = as.factor(year)))
+p + geom_line() +
+  scale_color_brewer("year", palette = "Dark2")
 ```
 
+### Problem 4
+
+Using the play-by-play data set from 2020, compare the average starting 
+position when a team chose to take a touchback versus when returning the 
+kickoff. What about average expected points in both cases? 
+
+### Answer 4
+
+The play after the kickoff is what we will use in order to compare the two. 
+This is a proxy. 
 ```{r}
-filter(field_goals, down == 4, ydstogo == 2, yardline_100 == 33) %>% 
-  summarize(m = mean(ep))
-```
-
-So the question is, should we go for the
-field goal or not. Which event has the higher expected points value? If we go
-for it and make it, what happens? What if we don't make it? We need to compute
-the expected points for these two scenarios! 
-
-Suppose we go for it and make three yards. Now we have 1st and 10 at the 31
-yard line. What is the expected points for (1, 10, 30).
-
-```{r}
-filter(first_downs, yardline_100 == 31) %>%
-  summarize(mean(ep))
-```
-
-What about if we don't make it? Say we only gain one yard. 
-```{r}
-filter(first_downs, yardline_100 == 68) %>%
-  summarize(mean(ep))
-```
-
-The expected points in this scenario is $3.66 p - 1.43 (1-p)$, and we would 
-need to find a play that satisfies the following inequality in order to "go
-for it":
-$$3.66 p - 1.43 (1-p) \ge 1.40.$$
-What is $p$? If $p \ge 0.56$, go for it! 
-
-## Simulation
-
-Load the NFL play-by-play data from the 2019 and 2020 season, named `nfl_pbp_19_20` 
-in the textbook's R package. 
-
-```{r}
-nfl_pbp_19_20 <- readRDS("../data/pbp-19-20.rds")
-```
-
-### Simulate Plays
-
-We will examine the effect of a possible rule change using simulation. Refer to
-Mike Lopez's blog post given [here](https://statsbylopez.netlify.com/post/resampling-nfl-drives/). The 
-following code shows how to simulate a large number of drives in which punting or kicking a field goal is not an option. 
-
-```{r}
-## Ryan Elmore
-## Sample Drives in NFL
-## (See https://statsbylopez.netlify.app/post/resampling-nfl-drives/)
-## Update: 14 May 2021
-
-sample_play <- function(down, yards_to_go, yard_line, play_by_play_data){
-  tmp <- filter(play_by_play_data,
-                play_type %in% c("pass", "run"),
-                down == down,
-                ydstogo == yards_to_go,
-                yardline_100 == yard_line) %>%
-    sample_n(size = 1)
-  return(tmp)
-}
-
-sample_play_needs_td <- function(down, yards_to_go, yard_line,
-                                 play_by_play_data){
-  down_original <- down
-  if (yard_line >= 95){yard_line <- 95}
-  if (down == 4 & yards_to_go >= 3){down <- 3}
-  if (yards_to_go >= 20){yards_to_go <- 20}
+pbp_2020 <- readRDS("../data/play-by-play-data.rds") %>%
+  dplyr::filter(., year(game_date) >= "2020")
   
-  ## Could add some buffers here to add plays; see Lopez's blog post  
-  sim_play <- sample_play(down = down,
-                          yards_to_go = yards_to_go,
-                          yard_line = yard_line,
-                          play_by_play_data = play_by_play_data)
-  
-  yards_gained <- sim_play$yards_gained
-  new_yard_line <- yard_line - yards_gained
-  new_down <- if_else(yards_gained >= yards_to_go, 1, down_original + 1)
-  new_distance <- if_else(yards_gained >= yards_to_go & new_yard_line >= 10,
-                          10,
-                          if_else(yards_gained >= yards_to_go & new_yard_line < 10, 
-                                  new_yard_line, 
-                                  yards_to_go - yards_gained))
-  if(new_distance <= 0){new_distance <- 1}
-  if(new_yard_line < 0){new_yard_line <- 1}
-  return(data.frame(down_original, yards_to_go, yard_line, 
-                    yards_gained, 
-                    new_yard_line = yard_line - yards_gained, new_down, 
-                    new_distance, turnover = sim_play$turnover, 
-                    td_offense = sim_play$td_offense, 
-                    end_drive = new_down > 4 | 
-                      sim_play$turnover | sim_play$td_offense,
-                    play = sim_play$desc))
-}
+kickoffs <- which(pbp_2020$play_type == "kickoff")
+kickoff_df <- pbp_2020[kickoffs + 1, ] 
 
-sample_drive <- function(yard_line, play_by_play_data){
-  ## This drive is simulating drives where we have to go for it on 
-  ##  fourth down. 
-  ## Test: down <- 2; yards_to_go <- 5; yard_line <- 35
-  
-  drive_store <- NULL
-  new_down <- 1
-  new_distance <- 10
-  new_yard_line <- yard_line
-  end_of_drive <- FALSE
-  play_num <- 1
-  
-  while(!end_of_drive){
-    run_play <- sample_play_needs_td(down = new_down, 
-                                     yards_to_go = new_distance, 
-                                     yard_line = new_yard_line,
-                                     play_by_play_data = play_by_play_data)
-    run_play$play_num <- play_num
-    drive_store <- bind_rows(drive_store, run_play)
-    new_down <- run_play$new_down
-    new_distance <- run_play$new_distance
-    new_yard_line <- run_play$new_yard_line
-    end_of_drive <- run_play$end_drive
-    play_num <- play_num + 1
-  }
-  return(drive_store)
-}
-```
+touch_back <- kickoff_df %>%
+  filter(yardline_100 == 75)
+no_touch_back <- kickoff_df %>%
+  filter(yardline_100 != 75)
+
+100 - mean(no_touch_back$yardline_100)
+p <- ggplot(data = no_touch_back,
+            aes(x = 100 - yardline_100))
+p + geom_density()
+``` 
 
 ```{r}
-# source("w08-nfl-drives.R")
-
-nfl_pbp_19_20 <- mutate(nfl_pbp_19_20,
-                   is_fumble = !is.na(fumble_recovery_1_team),
-                   turnover = grepl("INTERCEPTED", desc) |
-                     (is_fumble & fumble_recovery_1_team != posteam),
-                   td_offense = rush_touchdown | pass_touchdown) %>%
-  filter(!is.na(yards_gained))
-
-rm(results)
-set.seed(018)
-nSim <- 100
-yard_line_start <- 75
-
-for (i in 1:nSim){
-  if(i %% 20 == 0){
-    cat(sprintf('Drive: %s at %s\n', i, Sys.time()))
-  }
-  tmp_result <- suppressWarnings(sample_drive(yard_line_start, nfl_pbp_19_20))
-  tmp_result$sim <- i
-  if(exists("results")){
-    results <- suppressWarnings(bind_rows(results, tmp_result))
-  }
-  else(results <- tmp_result)
-}
-```
-
-Compute the percentage of drives that resulted in a turnover. Similarly, what
-is the percentage of drives that resulted in a touchdown? 
-
-```{r}
-results %>%
-  dplyr::filter(end_drive == TRUE) %>%
-  dplyr::summarize(tos_pct = sum(turnover)/nSim,
-                   td_pct = sum(td_offense)/nSim)
-```
-
-What is the average number of plays per drive? 
-
-```{r}
-results %>%
-  dplyr::filter(end_drive == TRUE) %>%
-  dplyr::summarize(ppd = mean(play_num))
-```
-
-```{r}
-p <- results %>%
-  dplyr::filter(end_drive == TRUE) %>%
-  ggplot(., aes(x = play_num))
-p + geom_histogram()
-```
-
-Is there a difference when scoring a TD vs. not scoring a TD? 
-
-```{r}
-results %>%
-  filter(end_drive == TRUE) %>%
-  group_by(td_offense) %>%
-  summarize(ppd = mean(play_num))
-```
-
-Compute a histogram for number of plays per drive colored or facetted by whether
-or not the offense scored a TD.  
-
-```{r}
-p <- ggplot(data = filter(results, end_drive == TRUE),
-            aes(x = play_num, fill = td_offense))
-p + geom_histogram() +
-  scale_fill_brewer(palette = "Set1") +
-  theme_bw()
-```
-
-```{r}
-p <- ggplot(data = filter(results, end_drive == TRUE),
-            aes(x = play_num, fill = td_offense))
-p + geom_histogram() +
-  facet_grid(~ td_offense) +
-  scale_fill_brewer(palette = "Set1") +
-  guides(fill = F) +
-  theme_bw()
+median(touch_back$ep)
+median(no_touch_back$ep, na.rm = T)
 ```
 
 
-## NFLSimulatoR
 
-Now we turn our attention to a framework for doing a similar task to what is 
-given above using the [NFLSimulatoR R Package](https://datacolorado.com/r/nflsimulator/).
+## NFL Play Calling
 
-### Prep the Data
-In order to use the package, you need to download either NFLfastR or NFLscrapR
-data and then run it through the package's data prep function, e.g.
+This lab is focused on using `NFLSimulatoR` to investigate optimal strategy in
+the NFL.
 
-```{r}
-nfl_pbp_19_20 <- NFLSimulatoR::prep_pbp_data(nfl_pbp_19_20)
+```{r data, cache = TRUE}
+pbp_data <- readRDS("../data/pbp-19-20.rds")
+pbp_data <- NFLSimulatoR::prep_pbp_data(pbp_data)
 ```
 
-### Sample Play
+### Problem 5
 
-Let's sample a first down and ten play starting from a team's 25 yardline. Note
-that we've included a `strategy` argument in the `sample_play()` function. We 
-will discuss that in a bit. 
+We want to compare expected points when starting first down and ten yards to go
+from the twenty-five yard line under three different strategies. The three 
+strategies include different pass/rush proportions: $p = 0.25, 0.5,$ and $0.75$.
+Generate 1000 drives under each scenario. 
 
-```{r}
-set.seed(1999)
-play <- NFLSimulatoR::sample_play(
-  what_down = 1,
-  yards_to_go = 10,
-  yards_from_own_goal = 45,
-  play_by_play_data = nfl_pbp_19_20,
-  strategy = "normal"
-)
-play$desc
-```
+### Answer 5
 
-The `strategy` argument is mainly concerned with sampling drives in which we
-want to employ a particular strategy. That is, we might have to have an 
-equal mix of passes/rushes, or we might want to always go for it on fourth 
-down. Or maybe we only want to go for it on fourth down if we have less
-than a certain number of yards to pick up the first down. There are a lot 
-of different possibilities. 
-
-### Sample Drives
-
-Here is how we might sample a series of drives. This is very similar to what
-we did earlier today.
-
-```{r}
-set.seed(98)
-drives <- NFLSimulatoR::sample_drives(
-  n_sims = 100,
+```{r, cache = T}
+set.seed(101)
+drives_25 <- NFLSimulatoR::sample_drives(
+  n_sims = 1000,
   from_yard_line = 25,
-  play_by_play_data = nfl_pbp_19_20,
-  strategy = "fourth_downs",
-  fourth_down_strategy = "always_go_for_it",
+  play_by_play_data = pbp_data,
+  strategy = "passes_rushes",
+  prop_passes = 0.25,
+  single_drive = T,
+  progress = T #shows progress bar for simulations
+)
+
+drives_5 <- NFLSimulatoR::sample_drives(
+  n_sims = 1000,
+  from_yard_line = 25,
+  play_by_play_data = pbp_data,
+  strategy = "passes_rushes",
+  prop_passes = 0.5,
+  single_drive = T,
+  progress = T #shows progress bar for simulations
+)
+
+drives_75 <- NFLSimulatoR::sample_drives(
+  n_sims = 1000,
+  from_yard_line = 25,
+  play_by_play_data = pbp_data,
+  strategy = "passes_rushes",
+  prop_passes = 0.75,
   single_drive = T,
   progress = T #shows progress bar for simulations
 )
 ```
 
-Now let's consider a strategy that specifies a certain proportion of passes/runs.
+### Problem 6
+
+Compute the expected points per drive for each of the three strategies. 
 
 ```{r}
-set.seed(101)
-drives_pr <- NFLSimulatoR::sample_drives(
-  n_sims = 100,
+sum(drives_25$points)/1000
+sum(drives_5$points)/1000
+sum(drives_75$points)/1000
+```
+
+### Problem 7
+
+Now let us compare the Denver Broncos to the Kansas City Chiefs. Generate 1000
+drives using $p = 0.25$ and $0.75$ for plays involving each of their teams only.
+You will need to filter the play by play data into two data sets containing 
+plays from each team (only). Then redo what you did in problems 1 and 2. 
+
+```{r}
+den_data <- pbp_data %>% dplyr::filter(posteam == "DEN")
+kc_data <- pbp_data %>% dplyr::filter(posteam == "KC")
+```
+
+```{r, cache = T}
+drives_den_25 <- NFLSimulatoR::sample_drives(
+  n_sims = 1000,
   from_yard_line = 25,
-  play_by_play_data = nfl_pbp_19_20,
+  play_by_play_data = den_data,
   strategy = "passes_rushes",
   prop_passes = 0.25,
   single_drive = T,
@@ -461,10 +199,49 @@ drives_pr <- NFLSimulatoR::sample_drives(
 )
 ```
 
-Look at the percentage of passes/runs.
-
-```{r}
-group_by(drives_pr, play_type) %>% 
-  summarize(n = n())
+```{r, cache = T}
+drives_kc_25 <- NFLSimulatoR::sample_drives(
+  n_sims = 1000,
+  from_yard_line = 25,
+  play_by_play_data = kc_data,
+  strategy = "passes_rushes",
+  prop_passes = 0.25,
+  single_drive = T,
+  progress = T #shows progress bar for simulations
+)
 ```
 
+```{r, cache = T}
+drives_den_75 <- NFLSimulatoR::sample_drives(
+  n_sims = 1000,
+  from_yard_line = 25,
+  play_by_play_data = den_data,
+  strategy = "passes_rushes",
+  prop_passes = 0.75,
+  single_drive = T,
+  progress = T #shows progress bar for simulations
+)
+```
+
+```{r, cache = T}
+drives_kc_75 <- NFLSimulatoR::sample_drives(
+  n_sims = 1000,
+  from_yard_line = 25,
+  play_by_play_data = kc_data,
+  strategy = "passes_rushes",
+  prop_passes = 0.75,
+  single_drive = T,
+  progress = T #shows progress bar for simulations
+)
+```
+
+
+```{r}
+sum(drives_den_25$points)/1000
+sum(drives_den_75$points)/1000
+```
+
+```{r}
+sum(drives_kc_25$points)/1000
+sum(drives_kc_75$points)/1000
+```
