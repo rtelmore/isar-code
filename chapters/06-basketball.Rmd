@@ -1,0 +1,377 @@
+---
+title: "Chapter Six -- Basketball"
+author: "Ryan Elmore"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r knitr-options, include = FALSE}
+knitr::opts_chunk$set(fig.align="center",
+                      warning = FALSE,
+                      message = FALSE,
+                      comment = NA)
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(gganimate)
+library(nbastatR)
+library(jpeg)
+library(grid)
+library(hexbin)
+library(gifski)
+library(png)
+library(mgcv)
+```
+
+```{r data}
+games <- readRDS("../data/nba-games-2021.rds")
+ff <- readRDS("../data/four-factors-team-2021.rds")
+adv <- readRDS("../data/advanced-team-2021.rds")
+```
+
+## Problem 1
+
+Mutate the `games` (`nba-games-2019.rds`) table to include a column for Free
+Throw Rate (FTR). You will need to use the `fgaTeam` and `ftaTeam` columns in 
+the table. Plot your new variable against `rateFTA` from the `ff` table 
+(`four-factors-team.rds`).
+
+## Answer 1
+
+```{r}
+df_ff_games <- merge(games, ff) %>% 
+  dplyr::mutate(., ftr = ftaTeam/fgaTeam)
+p <- ggplot(data = df_ff_games,
+            aes(x = ftr, y = rateFTA))
+p + geom_line() +
+  theme_bw()
+```
+
+## Problem 2
+
+```{r}
+game_summary <- games %>% 
+  dplyr::select(., dateGame, idGame, slugTeam, slugMatchup, locationGame,
+                outcomeGame, plusminusTeam) 
+```
+
+Compute the average pace for the Denver Nuggets when they play at home and when
+they play away from Denver. The data are in the `adv` table and you will need
+to join this with the `game_summary` object defined above. 
+
+## Answer 3
+
+```{r}
+tmp <- inner_join(game_summary, adv) %>%
+  group_by(slugTeam, locationGame) %>% 
+  summarize(avg_pace = mean(pace)) %>% 
+  arrange(desc(avg_pace))
+```
+
+## Problem 4
+
+Construct a new data frame (call it `df_ff`) that has game id, game date, team,
+the four factors, offensive rating (ortg), defensive rating (drtg), win/loss,
+home/away, and plusminusTeam. Create an is_win variable to be TRUE if it was a
+win and FALSE if an L. 
+
+## Answer 4
+
+```{r}
+df_ff <- inner_join(adv, ff) %>%
+  dplyr::inner_join(game_summary) %>% 
+  dplyr::select(dateGame, idGame, slugTeam, pctOREB, pctTOVTeam, pctEFG,
+                rateFTA, ortg, drtg, outcomeGame, locationGame,
+                plusminusTeam) %>%
+  dplyr::mutate(is_win = ifelse(outcomeGame == "W", T, F))
+  
+```
+
+## Problem 5
+
+Compute the correlation matrix between the four factors. Is the result
+surprising? Why or why not?
+
+## Answer 5
+
+```{r}
+cor(select(df_ff, pctEFG, pctOREB, pctTOVTeam, rateFTA))
+```
+
+## Problem 6
+
+Filter the `adv` data to get both teams information from the April 24, 2021 game
+between the Los Angeles Lakers and the Dallas Mavericks. Compute the z scores
+for offensive and defensive ratings for both teams relative to the league
+distributions.
+
+## Answer 6
+```{r}
+lal_dal_adv <- merge(game_summary, adv) %>% 
+  dplyr::filter(dateGame == ymd("2021-04-24"),
+                slugTeam %in% c("LAL", "DAL"))
+lal_dal_adv$slugTeam
+pnorm((lal_dal_adv$ortg - mean(adv$ortg))/sd(adv$ortg))
+pnorm((lal_dal_adv$drtg - mean(adv$drtg))/sd(adv$drtg))
+```
+
+## Problem 7
+
+Using the `df_ff` data set, run a multiple regression model using the four 
+factors and offensive rating to predict plusminusTeam. What are the predicted 
+values of plusminusTeam for both teams from Problem 6? 
+
+## Answer 7
+
+```{r}
+ff_lm <- lm(plusminusTeam ~ pctOREB + pctTOVTeam + pctEFG + rateFTA + ortg,
+            data = df_ff)
+```
+
+## Answer 7
+
+```{r}
+ff_lm <- lm(plusminusTeam ~ pctOREB + pctTOVTeam + pctEFG + rateFTA + ortg,
+            data = df_ff)
+summary(ff_lm)
+```
+
+
+### Problem 1
+
+```{r, eval = T}
+df <- readRDS("../data/nuggets-2015-21.rds")
+```
+
+Use the data related to the Nuggets shots from 2015 through 2020 given here and
+create a barchart showing the total number of observations by season. Show the 
+zone (`zoneBasic`) as a color within each bar. 
+
+### Answer 1
+
+```{r}
+p <- ggplot(data = df,
+            aes(x = slugSeason, fill = zoneBasic))
+p + geom_bar() +
+  scale_fill_brewer("", palette = "Dark2")
+```
+
+### Problem 2
+
+Who took the most shots in each season?
+
+### Answer 2
+
+```{r}
+group_by(df, slugSeason, namePlayer) %>%
+  summarize(n = n()) %>%
+  filter(n == max(n))
+```
+
+### Problem 3
+Compute the shot chart for Denver's 2020-21 season. Use points colored by the
+zone. 
+
+### Answer 3
+```{r}
+court <- rasterGrob(readJPEG("../fig/nba_court.jpg"), 
+                    width = unit(1, "npc"),
+                    height = unit(1, "npc"))
+
+p <- ggplot(data = df %>% filter(slugSeason == "2020-21"),
+            aes(x = locationX, y = locationY, col = zoneBasic))
+p + annotation_custom(court, -250, 250, -50, 420) +
+  geom_point(alpha = .15) +
+  scale_color_brewer("Zone", palette = "Set1") +
+  coord_fixed() +
+  xlim(250, -250) +
+  ylim(-50, 420)
+```
+
+### Problem 4
+Add a layer to the previous figure showing points shaped by typeEvent (make
+or miss the shot). 
+
+```{r}
+p <- ggplot(data = df %>% filter(slugSeason == "2020-21"),
+            aes(x = locationX, y = locationY, col = zoneBasic,
+                shape = typeEvent))
+p + annotation_custom(court, -250, 250, -50, 420) +
+  geom_point(alpha = .15) +
+  scale_color_brewer("Zone", palette = "Set1") +
+  coord_fixed() +
+  xlim(250, -250) +
+  ylim(-50, 420)
+```
+
+### Problem 5
+
+Compare Michael Porter Jr.'s shots from 2020 and 2021. Create a 2x2 facet plot
+showing his makes/misses by zone for both years. 
+
+```{r}
+p <- ggplot(data = df %>% filter(yearSeason %in% c(2020, 2021),
+                                 namePlayer == "Michael Porter Jr."),
+            aes(x = locationX, y = locationY, col = zoneBasic,
+                shape = typeEvent))
+p + annotation_custom(court, -250, 250, -50, 420) +
+  geom_point(alpha = .15) +
+  facet_grid(yearSeason ~ typeEvent) +
+  scale_color_brewer("Zone", palette = "Set1") +
+  coord_fixed() +
+  xlim(250, -250) +
+  ylim(-50, 420)
+
+```
+
+
+### Problem 1
+
+Create an animation showing how the team's shots evolved over the six years in
+this data set. Remove the shape aesthetic. What do you observe to have happened 
+over the years?
+
+### Answer 1
+
+```{r}
+ggplot(data = df,
+            aes(x = locationX, y = locationY, col = zoneBasic)) +
+  annotation_custom(court, -250, 250, -50, 420) +
+  geom_point(alpha = .15) +
+  scale_color_brewer("Zone", palette = "Set1") +
+  coord_fixed() +
+  xlim(250, -250) +
+  ylim(-50, 420) +
+  transition_manual(slugSeason) +
+  labs(title = 'Season: {current_frame}')
+```
+
+### Problem 2
+
+Construct an animated bar chart showing the count of each type of shot, whether
+it was made (`typeEvent`), over each season. The bars should represent each
+zone (`zoneBasic` variable) for each season. 
+
+### Answer 2
+
+```{r}
+ggplot(data = df %>% filter(zoneBasic != "Backcourt"),
+            aes(x = zoneBasic, fill = typeEvent)) +
+  geom_bar() +
+  coord_flip() +
+  scale_fill_brewer("", palette = "Set1") +
+  transition_states(slugSeason) +
+  labs(title = 'Season: {closest_state}')
+```
+
+### Problem 3
+
+Download the shot charts for the 2021 Golden State Warriors and construct a 
+heat map showing the probability of Stephen Curry making shots. 
+
+### Answer 3
+```{r}
+df <- teams_shots(teams = "Golden State Warriors", seasons = 2021)
+player <- "Stephen Curry"
+steph_df <- filter(df, namePlayer == player)
+make_gam <- gam(isShotMade ~ s(locationX, locationY), #Model for P(make; x & y loca)
+                family = binomial, #logistic regression GAM
+                data = steph_df)
+
+# Find predicted probabilities over a 50 x 50 grid
+make_predict_df <- expand.grid(locationX = seq(-250, 250, length = 50), 
+                               locationY = seq(-50, 420, length = 50))
+
+# Get the predicted values from the model and convert to probability values:
+make_preds <- predict(make_gam, 
+                      newdata = make_predict_df,
+                      type = "response")
+make_predict_df <- make_predict_df %>%
+  mutate(., make_prob = make_preds)
+
+p <- ggplot(data = make_predict_df,
+            aes(x = -locationX, y = locationY, fill = make_prob))
+p + annotation_custom(court, -250, 250, -50, 420) +
+  geom_tile(alpha = .75) +
+  scale_fill_distiller("P(Make)", palette = "Spectral") +
+  coord_fixed() +
+  scale_x_continuous("", breaks = NULL, limits = c(-250, 250)) +
+  scale_y_continuous("", breaks = NULL, limits = c(-50, 420))
+
+```
+
+
+```{r}
+df <- readRDS("../data/nba_stats.rds")
+```
+
+### Problem 1
+
+Find the game in which the highest offensive rating in this data set was
+achieved. What team (`slugTeam`) had this rating?
+
+### Answer 1
+
+```{r}
+dplyr::arrange(df, desc(ortg))
+```
+
+### Problem 2
+
+What team has the lowest average offensive rating in this data set? 
+
+### Answer 2
+
+```{r}
+df %>% dplyr::group_by(., slugTeam) %>% 
+  dplyr::summarize(., avg = mean(ortg)) %>% 
+  dplyr::arrange(desc(-avg))
+```
+
+### Problem 3
+
+What team (`slugTeam`) has the largest absolute difference between their home 
+and away average offensive rating? 
+
+### Answer 3
+
+```{r}
+df %>% 
+  dplyr::group_by(., slugTeam, locationGame) %>% 
+  dplyr::summarise(., avg = mean(ortg)) %>% 
+  dplyr::ungroup() %>% 
+  tidyr::pivot_wider(., names_from = locationGame, values_from = avg) %>% 
+  dplyr::mutate(., diff = abs(H - A)) %>% 
+  dplyr::arrange(., desc(diff))
+```
+
+### Problem 4
+
+Compute a logistic regression of offensive rating ($X_1$ variable) and the game
+location ($X_2$) as predictor variables of the probability of winning the game. 
+You will need to use `as.factor(outcomeGame)` or something similar as your Y 
+variable. Predict the probability of winning the game for a team with an 
+offensive rating equal to 115 (`ortg = 115`) playing away (`locationGame = "A"`).
+Round your answer to the nearest hundreth. 
+
+```{r}
+four_glm <- glm(as.factor(outcomeGame) ~ ortg + locationGame,
+                family = "binomial",
+                data = df)
+predict(four_glm, 
+        newdata = data.frame(outcomeGame = NA, 
+                             ortg = 115, 
+                             locationGame = "A"),
+        type = "response")
+```
+
+```{r}
+summary(four_glm)
+```
+
