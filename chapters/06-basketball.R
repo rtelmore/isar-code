@@ -138,6 +138,10 @@ adv_glm <- glm(win ~ . - plusminusTeam,
                family = "binomial")
 summary(adv_glm)
 
+adv_glm <- glm(win ~ pctEFG + pctOREB + pctTOVTeam + rateFTA,
+               data = df_reg,
+               family = "binomial")
+
 predict(adv_glm, type = "response")[1:10]
 
 
@@ -159,10 +163,11 @@ nba_nuggets_shots_2021 <- nbastatR::teams_shots(teams = "Denver Nuggets",
 
 nba_nuggets_shots <- readRDS("data/nuggets-2015-21.rds")
 
-court <- rasterGrob(readJPEG(system.file("images/nba_court.jpg", 
-                                         package = "ISAR")), 
-                    width = unit(1, "npc"),
-                    height = unit(1, "npc"))
+court <- grid::rasterGrob(jpeg::readJPEG(system.file("images/nba_court.jpg", 
+                                                     package = "ISAR")), 
+                          width = unit(1, "npc"),
+                          height = unit(1, "npc"))
+court <- grid::rasterGrob(jpeg::readJPEG("fig/nba_court.jpg"))
 player_name <- "Nikola Jokic"
 p <- ggplot(data = dplyr::filter(nba_nuggets_shots, 
                                  namePlayer == player_name,
@@ -175,7 +180,20 @@ p + annotation_custom(court, -250, 250, -50, 420) +
   scale_y_continuous(breaks = NULL, labels = NULL, limits = c(-50, 420)) +
   coord_fixed() +
   labs(x = "", y = "")
+ggsave("fig/chap-06/jokic-shots-2021.png", height = 6, width = 6)
 
+p <- ggplot(data = dplyr::filter(nba_nuggets_shots, 
+                                 namePlayer == player_name,
+                                 yearSeason == 2021),
+            aes(x = locationX, y = locationY, col = zoneBasic))
+p + annotation_custom(court, -250, 250, -50, 420) +
+  geom_point(alpha = .5) +
+  scale_color_brewer("Zone", palette = "Set1") +
+  coord_fixed() +
+  xlim(250, -250) +
+  ylim(-50, 420) +
+  labs(x = "", y = "")
+ggsave("fig/chap-06/jokic-shots-w-zones-2021.png", height = 6, width = 8)
 
 ## -----------------------------------------------------------------------------------------------------
 p <- ggplot(data = df,
