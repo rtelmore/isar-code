@@ -262,3 +262,111 @@ p + annotation_custom(court, -250, 250, -50, 420) +
 
 ```
 
+## Animation with gganimate
+
+One question that you might have after looking at several of the previous figures 
+is "How can we look at these figures as an animation?" Fortunately, the `gganimate` 
+package makes turning a series of figures into an animation relatively easy. Let's take a look. Here are a few examples at looking at the top four shot takers for
+the Denver Nuggets during the 2020-21 season. 
+
+```{r,  eval = FALSE, include = T}
+df <- readRDS("data/nuggets-2015-21.rds")
+players <- c("Jamal Murray", "Nikola Jokic", "Will Barton", "Michael Porter Jr.")
+ggplot(data = df %>% 
+         dplyr::filter(., namePlayer %in% players, yearSeason == 2021),
+       aes(x = -locationX, y = locationY, col = zoneBasic)) +
+  annotation_custom(court, -250, 250, -50, 420) +
+  geom_point(alpha = .35) +
+  scale_color_brewer("", palette = "Dark2") +
+  coord_fixed() +
+  scale_x_continuous("", breaks = NULL, limits = c(-250, 250)) +
+  scale_y_continuous("", breaks = NULL, limits = c(-50, 420)) +
+  transition_manual(namePlayer) + ### Here is where the animation starts
+  labs(title = 'Player: {current_frame}')
+```
+
+```{r, eval = FALSE, include = T}
+ggplot(data = df %>% 
+         dplyr::filter(., namePlayer %in% players, yearSeason == 2021),
+            aes(x = -locationX, y = locationY, col = zoneBasic)) +
+  annotation_custom(court, -250, 250, -50, 420) +
+  geom_point(alpha = .35) +
+  scale_color_brewer("", palette = "Dark2") +
+  coord_fixed() +
+  scale_x_continuous("", breaks = NULL, limits = c(-250, 250)) +
+  scale_y_continuous("", breaks = NULL, limits = c(-50, 420)) +
+  transition_states(namePlayer) +
+  labs(title = '2019-20 Shots for Player: {closest_state}')
+```
+
+### Problem 1
+
+Create an animation showing how the team's shots evolved over the six years in
+this data set. Remove the shape aesthetic. What do you observe to have happened 
+over the years?
+
+### Answer 1
+
+```{r, eval = FALSE, include = T}
+ggplot(data = df,
+            aes(x = locationX, y = locationY, col = zoneBasic)) +
+  annotation_custom(court, -250, 250, -50, 420) +
+  geom_point(alpha = .15) +
+  scale_color_brewer("Zone", palette = "Set1") +
+  coord_fixed() +
+  xlim(250, -250) +
+  ylim(-50, 420) +
+  transition_manual(slugSeason) +
+  labs(title = 'Season: {current_frame}')
+```
+
+### Problem 2
+
+Construct an animated bar chart showing the count of each type of shot, whether
+it was made (`typeEvent`), over each season. The bars should represent each
+zone (`zoneBasic` variable) for each season. 
+
+### Answer 2
+
+```{r, eval = FALSE, include = T}
+ggplot(data = df %>% filter(zoneBasic != "Backcourt"),
+            aes(x = zoneBasic, fill = typeEvent)) +
+  geom_bar() +
+  coord_flip() +
+  scale_fill_brewer("", palette = "Set1") +
+  transition_states(slugSeason) +
+  labs(title = 'Season: {closest_state}')
+```
+
+### Problem 3
+
+Predict the probability of make/miss based on shot distance for Nikola Jokic 
+during the 2021-22 season using a Generalized Linear Model. Filter the data to 
+use only shots less than or equalto 30 feet.
+
+```{r}
+df <- readRDS("data/nuggets-2015-21.rds")
+p <- ggplot(data = df %>% 
+              dplyr::filter(., distanceShot <= 30, namePlayer == "Nikola Jokic") ,
+            aes(x = distanceShot, y = ifelse(isShotMade, 1, 0)))
+p + geom_point(alpha = .15) +
+  geom_smooth(method = "glm", formula = y ~ poly(x, 2),
+              method.args = list(family = "binomial"))
+```
+
+```{r}
+mod <- glm(isShotMade ~ distanceShot,
+           data = df %>% 
+              dplyr::filter(., distanceShot <= 30, namePlayer == "Nikola Jokic"),
+           family = "binomial")
+summary(mod)
+```
+```{r}
+mod_2 <- glm(isShotMade ~ poly(distanceShot, 2),
+           data = df %>% 
+              dplyr::filter(., distanceShot <= 30, namePlayer == "Nikola Jokic"),
+           family = "binomial")
+summary(mod_2)
+
+```
+
