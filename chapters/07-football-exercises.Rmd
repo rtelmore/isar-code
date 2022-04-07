@@ -27,7 +27,20 @@ variable `year`. See `?year` from the `lubridate` package.
 
 ### Answer 1
 
-```{r, include = F, cache = TRUE, warning = FALSE}
+```{r, cache = T}
+df <- readRDS("../data/play-by-play-data.rds")
+field_goals <- df %>%
+  dplyr::filter(., play_type == "field_goal") %>%
+  dplyr::select(., game_date, time, down, yrdln, ydstogo, yardline_100, posteam, 
+                defteam, field_goal_result, field_goal_attempt,
+                game_seconds_remaining, ep, contains("prob")) %>% 
+  dplyr::mutate(., success = ifelse(field_goal_result == "made", 1, 0),
+                  fg_distance = yardline_100 + 17) %>% 
+  na.omit()
+saveRDS(field_goals, "../data/field-goals.rds")
+```
+
+```{r, include = F, warning = FALSE}
 field_goals <- readRDS("../data/field-goals.rds")
 ```
 
@@ -80,7 +93,7 @@ p + geom_line() +
 
 ### Problem 4
 
-Using the play-by-play data set from 2020, compare the average starting 
+Using the play-by-play data set from the 2020 season, compare the average starting 
 position when a team chose to take a touchback versus when returning the 
 kickoff. What about average expected points in both cases? 
 
@@ -119,8 +132,8 @@ This lab is focused on using `NFLSimulatoR` to investigate optimal strategy in
 the NFL.
 
 ```{r data, cache = TRUE}
-pbp_data <- readRDS("../data/pbp-19-20.rds")
-pbp_data <- NFLSimulatoR::prep_pbp_data(pbp_data)
+# pbp_data <- readRDS("../data/nfl-pbp-2020.rds")
+pbp_data <- NFLSimulatoR::prep_pbp_data(pbp_2020)
 ```
 
 ### Problem 5
@@ -245,3 +258,83 @@ sum(drives_den_75$points)/1000
 sum(drives_kc_25$points)/1000
 sum(drives_kc_75$points)/1000
 ```
+
+## More Exercises
+
+### Problem 5
+
+Using the play by play data from the 2020 season, construct a density plot 
+showing the starting field position (`yardline_100`)
+distribution for all plays immediately after a kickoff. What value appears to 
+be the mode of this distribution? 
+
+```{r}
+index <- which(pbp_2020$play_type == "kickoff") + 1
+pbp_2020$play_after_kickoff <- row.names(pbp_2020) %in% index
+df_post_kick <- dplyr::filter(pbp_2020, play_after_kickoff == 1)
+
+p <- ggplot(data = df_post_kick,
+            aes(x = yardline_100))
+p + geom_density()
+```
+
+### Problem 6
+
+What is the average starting position for non-touchbacks (filter out 
+`yardline_100 == 75`)? This filter is not exact in the sense that we will only 
+see non-touchbacks, but it's a good proxy. 
+
+### Answer 6
+
+```{r}
+df_post_kick %>%
+  filter(yardline_100 != 75) %>%
+  summarize(avg_start = mean(yardline_100))
+```
+
+### Problem 7 
+
+Based on your result in the previous problem, do you think it's better for a team to 
+kick in the hopes of producing a touchback or not? Round to two decimal places.
+
+### Problem 8
+
+As a follow up, group by the team that kicked off (`defteam`) and 
+compute the average starting position for their opponents immediately after a
+kickoff. How many teams are, on average, better off when not producing a 
+touchback?
+
+### Answer 8
+
+```{r}
+tmp <- df_post_kick %>%
+  dplyr::filter(yardline_100 != 75) %>%
+  dplyr::group_by(defteam) %>%
+  dplyr::summarize(avg_start = mean(yardline_100)) %>%
+  dplyr::arrange(desc(avg_start))
+```
+
+### Problem 8 (More difficult)
+
+What is the difference in average expected points for the Denver Broncos when they 
+kick and produce a touchback versus when they do not produce a touchback? Round to
+two decimals places. 
+
+```{r}
+tmp_2 <- df_post_kick %>%
+  dplyr::mutate(., is_touchback = ifelse(yardline_100 == 75, "yes", "no")) %>%
+  dplyr::group_by(., defteam, is_touchback) %>%
+  dplyr::summarize(., avg_exp_point = mean(ep, na.rm = T)) %>% 
+  dplyr::filter(., !is.na(is_touchback)) %>% 
+  tidyr::pivot_wider(., names_from = is_touchback, values_from = avg_exp_point) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(., diff = yes - no) %>% 
+  dplyr::arrange(desc(-diff)) %>%
+  dplyr::mutate(., defteam = factor(defteam, defteam))
+p <- ggplot(data = tmp_2,
+            aes(defteam, diff))
+p + geom_col(fill = "#6e0000") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+

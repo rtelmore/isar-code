@@ -411,7 +411,7 @@ that we've included a `strategy` argument in the `sample_play()` function. We
 will discuss that in a bit. 
 
 ```{r}
-set.seed(1999)
+set.seed(5280)
 play <- NFLSimulatoR::sample_play(
   what_down = 1,
   yards_to_go = 10,

@@ -1,0 +1,308 @@
+---
+title: "Week 10 (Tu): Daily Fantasy Sports Lineup Selection"
+author: "Ryan Elmore"
+date: "`r format(Sys.Date(), '%d %b %Y')`"
+output: 
+  word_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r knitr-options, include = FALSE}
+knitr::opts_chunk$set(fig.align="center",
+                      warning = FALSE,
+                      message = FALSE,
+                      comment = NA)
+```
+
+```{r libs, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(janitor)
+library(lpSolve)
+theme_set(theme_bw())
+```
+
+## Daily Fantasy Sports
+
+[Need to explain DFS here]
+
+Load the Draftkings data (`dk-lac-dal` in ISAR package) for Game 3 of the 2021
+NBA Playoffs between the Los Angeles Clippers and the Dallas Mavericks. This is 
+a Draftkings Showdown game. We are intentionally simplifying this Showdown game
+in Draftkinds to illustrate how optimization works in R. 
+
+```{r}
+df <- read_csv("../data/DKSalaries.csv") %>%
+  clean_names() %>%
+  filter(roster_position == "UTIL")
+#saveRDS(df, "../data/draftkings.rds")
+```
+
+## Optimization
+
+### Objective Function
+
+Ideally, you would want to change this to something other than what the website
+suggests! (The coefficients of this function.)
+
+```{r}
+### Ei
+obj <- df$avg_points_per_game
+```
+
+### Constraints: Lineups, Salary, Teams (coefficients)
+
+1. We need 6, and only 6, players.  
+2. Salary is contained in `df$Salary`
+3. We need players from both teams
+
+In R:
+
+#### Left Hand Side
+
+```{r}
+## The following creates a coefficient matrix
+cons <- rbind(rep(1, nrow(df)), #player constraint
+              df$salary, #salary constraint
+              t(model.matrix(~ team_abbrev + 0, df))) # team contraints
+```
+
+#### Direction
+
+```{r}
+dir <- c("=", "<=", ">=", ">=")
+```
+
+#### Right Hand Side
+
+```{r}
+rhs <- c(6, 50000, 1, 1)
+```
+
+### Solution
+
+```{r}
+result <- lpSolve::lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+result
+```
+
+How do we find the actual solution? Our optimal team is:
+
+```{r}
+team <- df[which(result$solution == 1), ]
+team
+```
+
+Suppose we do not want Josh Richardson and DeMarcus Cousins for whatever 
+reason. How can we find the next best lineup? 
+```{r}
+df <- df %>%
+  dplyr::filter(!(name %in% c("Josh Richardson", "DeMarcus Cousins")))
+obj <- df$avg_points_per_game
+cons <- rbind(rep(1, nrow(df)),
+              df$salary,
+              t(model.matrix(~ team_abbrev + 0, df)))
+dir <- c("=", "<=", ">=", ">=")
+rhs <- c(6, 50000, 1, 1)
+result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+result
+```
+
+```{r}
+team <- df[which(result$solution == 1), ]
+team
+```
+
+How can we find the next best lineup? Update our constraints!
+
+```{r}
+results <- data.frame(P1 = rep(NA, 100),
+                      P2 = rep(NA, 100),
+                      P3 = rep(NA, 100),
+                      P4 = rep(NA, 100),
+                      P5 = rep(NA, 100),
+                      P6 = rep(NA, 100),
+                      points = rep(NA, 100),
+                      salary = rep(NA, 100))
+results[1, ] <- c(team$name, sum(team$avg_points_per_game), sum(team$salary))
+```
+
+```{r}
+for (i in 1:99){ ## 99 will give us 100 total teams
+  cons <- rbind(cons,
+                result$solution)
+  dir <- c(dir, "<=")
+  rhs <- c(rhs, 5)
+  result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+  team <- df[which(result$solution == 1), ]
+  results[i+1, ] <- c(team$name, sum(team$avg_points_per_game), sum(team$salary))
+}
+```
+
+### Actual Showdown
+
+```{r}
+df <- read_csv("../data/DKSalaries.csv") %>%
+  janitor::clean_names() %>% 
+  dplyr::mutate(new_pts = ifelse(roster_position == "CPT",
+                                 1.5*avg_points_per_game,
+                                 avg_points_per_game))
+obj <- df$new_pts
+cons <- rbind(rep(1, nrow(df)),
+              df$salary,
+              t(model.matrix(~ team_abbrev + 0, df)),
+              ifelse(df$roster_position == "CPT", 1, 0))
+dir <- c("=", "<=", ">=", ">=", "=")
+rhs <- c(6, 50000, 1, 1, 1)
+result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+result
+```
+
+```{r}
+team <- df[which(result$solution == 1), ]
+team
+```
+
+
+## Lab
+
+### Problem 1
+
+Read in the Draftkings data from the Memphis versus Utah (`dk_mem_utah` in
+ISAR) game. Filter to just
+include the non-Captain players in order to keep things simple. Compute a
+density plot for `avg_points_per_game`. Facet this plot by `team_abbrev`.
+
+### Answer 1
+
+```{r}
+df <- read_csv("../data/DKSalaries-lab.csv") %>%
+  janitor::clean_names() %>% 
+  dplyr::filter(roster_position != "CPT")
+
+# df <- readRDS("../data/draftkings.rds")
+p <- ggplot(df, aes(x = avg_points_per_game))
+p + geom_density() +
+  facet_grid(~ team_abbrev)
+```
+
+### Problem 2
+
+Find the team having the highest (aggregate) `avg_points_per_game`
+subject to: (1) we need at least one player from each team, (2) the team
+salary must be less than $50,000, and (3) we need at least six players total.
+What is the team, expected points, and salary?
+
+```{r}
+obj <- df$avg_points_per_game
+cons <- rbind(rep(1, nrow(df)),
+              df$salary,
+              t(model.matrix(~ team_abbrev + 0, df)))
+dir <- c("=", "<=", ">=", ">=")
+rhs <- c(6, 50000, 1, 1)
+result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+result
+```
+
+```{r}
+team <- df[which(result$solution == 1), ]
+team
+```
+
+### Problem 3
+
+Suppose that I was bullish on the Grizzlies given that they were playing at
+home. Find the best team (as above) that has at least four Grizzlies and report
+the expected points.
+
+### Answer 3
+
+```{r}
+obj <- df$avg_points_per_game
+cons <- rbind(rep(1, nrow(df)),
+              df$salary,
+              t(model.matrix(~ team_abbrev + 0, df)))
+dir <- c("=", "<=", ">=", ">=")
+rhs <- c(6, 50000, 4, 1)
+result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+team <- df[which(result$solution == 1), ]
+team
+```
+
+### Problem 4
+
+On the other hand, the Jazz had the best record in the league this season. Let's
+create the ten best lineups with at least three Jazz players.
+
+### Answer 4
+
+```{r}
+obj <- df$avg_points_per_game
+cons <- rbind(rep(1, nrow(df)),
+              df$salary,
+              t(model.matrix(~ team_abbrev + 0, df)))
+dir <- c("=", "<=", ">=", ">=")
+rhs <- c(6, 50000, 1, 3)
+result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+team <- df[which(result$solution == 1), ]
+team
+```
+
+```{r}
+results <- data.frame(P1 = rep(NA, 9),
+                      P2 = rep(NA, 9),
+                      P3 = rep(NA, 9),
+                      P4 = rep(NA, 9),
+                      P5 = rep(NA, 9),
+                      P6 = rep(NA, 9),
+                      points = rep(NA, 9),
+                      salary = rep(NA, 9))
+results[1, ] <- c(team$name, sum(team$avg_points_per_game), sum(team$salary))
+```
+
+```{r}
+for (i in 1:9){ ## 4 will give us 5 total teams
+  cons <- rbind(cons,
+                result$solution)
+  dir <- c(dir, "<=")
+  rhs <- c(rhs, 5)
+  result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+  team <- df[which(result$solution == 1), ]
+  results[i+1, ] <- c(team$name, sum(team$avg_points_per_game), sum(team$salary))
+}
+```
+
+### Problem 5
+
+Let's take a look at the real showdown game. Find the top legitimate showdown
+lineup as we did in class. 
+
+
+### Answer 5
+```{r}
+df <- read_csv("../data/DKSalaries-lab.csv") %>%
+  janitor::clean_names() %>% 
+  dplyr::mutate(new_pts = ifelse(roster_position == "CPT",
+                                 1.5*avg_points_per_game,
+                                 avg_points_per_game))
+obj <- df$new_pts
+cons <- rbind(rep(1, nrow(df)),
+              df$salary,
+              t(model.matrix(~ team_abbrev + 0, df)),
+              ifelse(df$roster_position == "CPT", 1, 0),
+              t(model.matrix(~ name + 0, df)))
+## length(unique(df$name))
+dir <- c("=", "<=", ">=", ">=", "=", rep("<=", 34))
+rhs <- c(6, 50000, 1, 1, 1, rep(1, 34))
+result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+result
+```
+
+```{r}
+team <- df[which(result$solution == 1), ]
+team
+```
