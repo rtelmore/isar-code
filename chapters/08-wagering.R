@@ -56,4 +56,5 @@ increasedhandleneeded <- handle105breakeven - handle
 output <- c(profit110, profit105, profitdifferential, profitdifferentialratio, handle105breakeven, increasedhandleneeded)
 #print the results to the terminal
 output
-[1] 13.28331 #round to $13.28
+[1] 2.272727e+06 1.190476e+06 1.082251e+06 1.909091e+00 9.545455e+07
+[6] 4.545455e+07
