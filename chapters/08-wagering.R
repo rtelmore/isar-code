@@ -15,7 +15,7 @@ bettoR::kelly(win_prob = 0.55, odds = 1.91, type = "dec")
 
 bettoR::kelly(win_prob = 0.54, odds = -110, type = "us")
 bettoR::kelly(win_prob = 0.53, odds = -110, type = "us")
-bettoR::kelly(win_prob = 0.45, odds = -110, type = "us")
+bettoR::kelly(win_prob = 0.52, odds = -110, type = "us")
 
 us_to_decimal_odds <- function(us_odds){
   decimal_odds <- ifelse(us_odds <= -100, 
