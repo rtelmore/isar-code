@@ -54,7 +54,13 @@ increasedhandleneeded <- handle105breakeven - handle
 #create a vector for output
 
 output <- c(profit110, profit105, profitdifferential, profitdifferentialratio, handle105breakeven, increasedhandleneeded)
+outputnames <- c("Profit at -110 odds", "Profit at -105 odds", "Difference in Profit in dollars", "Profit ratio difference", "Handle needed at -105 to earn same profit as at -110", "Increased handle needed at -105 to earn same profit as -110")
+outputresults <- setNames(output, outputnames)
 #print the results to the terminal
-output
-[1] 2.272727e+06 1.190476e+06 1.082251e+06 1.909091e+00 9.545455e+07
-[6] 4.545455e+07
+paste(names(outputresults), round(outputresults,2), sep = ": ")
+[1] "Profit at -110 odds: 2272727.27"                                         
+[2] "Profit at -105 odds: 1190476.19"                                         
+[3] "Difference in Profit in dollars: 1082251.08"                             
+[4] "Profit ratio difference: 1.91"                                           
+[5] "Handle needed at -105 to earn same profit as at -110: 95454545.45"       
+[6] "Increased handle needed at -105 to earn same profit as -110: 45454545.45"
