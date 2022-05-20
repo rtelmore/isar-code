@@ -72,6 +72,8 @@ paste(names(outputresults), round(outputresults,2), sep = ": ")
 profit_df <- data.frame(odds = c(-110, -105)) %>% 
   dplyr::mutate(profit = handle/2*(1 + 100/odds))
 
+profit_df 
+
 sprintf("Difference in profit: %s", 
         scales::dollar_format()(profit_df$profit[1] - profit_df$profit[2]))
 sprintf("Profit ratio: %s", 
