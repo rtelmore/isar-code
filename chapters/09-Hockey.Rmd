@@ -1,0 +1,792 @@
+---
+title: "Chapter XXX -- Hockey"
+author: "Ryan Elmore"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r knitr-options, include = FALSE}
+knitr::opts_chunk$set(fig.align="center",
+                      warning = FALSE,
+                      message = FALSE,
+                      comment = NA)
+```
+
+```{r libs, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(rvest)
+library(janitor)
+library(scales)
+library(readr)
+library(nhlapi)
+library(purrr)
+library(sportyR)
+theme_set(theme_bw())
+```
+
+## NHL Data
+
+### Hockey Reference 
+
+The data for this exercise was insprired by Mike Lopez's Statistics in Sports 
+class website and a post last year by Meghan Hall talk for Hockey Analytics 
+night in Canada (#HANIC on Twitter). Mike downloaded the data from 
+[war-on-ice blog](http://war-on-ice.com) when it was still in operation. The WOI
+folks have made quite a bit of data available on the 
+[WOI Github page](https://github.com/war-on-ice) page. Unfortunately, this site
+stopped being updated in 2016 and, so, I decided to just download a similar 
+dataset from [Hockey Reference](https://www.hockey-reference.com). We'll use
+my data. 
+
+I should note that the numbers will often come in as characters if you scrape
+Hockey Reference (or other reference.com sites). You will have to change a 
+particular field or variable to numeric (use `as.numeric(variable)`) before 
+plotting something.
+
+### Moneypuck
+
+There is a great website that makes a ton of hockey data available for download
+called [Moneypuck](http://moneypuck.com/). I'm not too familiar with the
+site, but it looks like almost all of their data is availabe as a .csv or a .zip
+file. How can we download this data? Check out the links given on their 
+download page. Here is how you could get all of the skater information for the
+2019-2020 season. Honestly, given my limited knowledge of hockey, this site is a
+bit overwhelming. 
+
+```{r, eval = F}
+link <- "http://moneypuck.com/moneypuck/playerData/seasonSummary/2021/regular/skaters.csv"
+df <- readr::read_csv(link)
+```
+
+Here are a few more links:
+
+1. All game data going back to 2008-9 season
+    - http://moneypuck.com/moneypuck/playerData/careers/gameByGame/all_teams.csv
+2. Shots (you can iterate over years)
+    - http://peter-tanner.com/moneypuck/downloads/shots_2019.zip
+
+
+### NHL API
+
+There is a new-ish R package for downloading NHL data directly from the NHL's API
+called `nhlapi`. We will look at that project next week. 
+
+## Basic and Advanced Statistics
+
+The data set that we use in the initial part of this chapter was obtained using 
+the following code block. The data set has 10,648 observations related to 
+players from the 2010-11 season through the 2021-22 season. How do we know what 
+season each variable/record is referring to? You have to look at the basic and 
+advanced tables on hockey-reference.com. Please refer to Chapter Four on Web 
+Scraping for 
+
+```{r, cache=TRUE}
+years <- 2011:2022
+for(i in seq_along(years)){
+  cat(sprintf('Year: %s at %s\n', years[i], Sys.time()))
+  reg_url <- paste("https://www.hockey-reference.com/leagues/NHL_", years[i],
+                   "_skaters.html", sep = "")
+  pg <- xml2::read_html(reg_url)
+  nhl_reg_stats <- rvest::html_table(pg, fill = TRUE)[[1]]
+  names(nhl_reg_stats) <- nhl_reg_stats[1, ]
+  nhl_reg_stats_2 <- janitor::clean_names(nhl_reg_stats) %>%
+    dplyr::filter(., rk != "Rk")
+  
+  adv_url <- paste("https://www.hockey-reference.com/leagues/NHL_", years[i],
+                   "_skaters-advanced.html", sep = "")
+  pg_2 <- xml2::read_html(adv_url) 
+  nhl_adv_stats <- rvest::html_table(pg_2, fill = TRUE)[[1]]
+  names(nhl_adv_stats) <- nhl_adv_stats[1, ]
+  nhl_adv_stats_2 <- janitor::clean_names(nhl_adv_stats) %>%
+    dplyr::filter(., rk != "Rk")
+    
+  tmp_results <- dplyr::inner_join(nhl_reg_stats_2, nhl_adv_stats_2) %>%
+    dplyr::mutate(., season = years[i]) %>%
+    dplyr::select(., -rk)
+  
+  if(exists("nhl_data")){
+    nhl_data <- dplyr::bind_rows(nhl_data, tmp_results)
+  }
+  else(nhl_data <- tmp_results)
+}
+
+nhl_data[, -c(1, 3, 4, 22, 41, 42)] <- sapply(nhl_data[, -c(1, 3, 4, 22, 41, 42)], 
+                                             as.numeric )
+```
+
+Look at some columns? What is Corsi? Corsi is the difference in shot 
+attempts (shots on goal + missed shots + blocked shots) when the player is on the
+ice and shot attempts by his opponent when he's on the the ice. Note that only 
+5 on 5 scenarios are counted. Another measure, Fenwick's, is similar but does
+not include blocked shots. 
+
+```{r}
+mac <- dplyr::filter(nhl_data, 
+                     player == "Nathan MacKinnon")
+```
+
+We could plot Corsi percent or Fenwicks percent by year. The Corsi percent is 
+just the percentage of Corsi's for divided by the total Corsi's for + Corsi's
+against. 
+
+```{r}
+p <- ggplot(data = mac,
+            aes(x = age, y = as.numeric(cf_percent))) 
+p + geom_line(col = "#236192") +
+  geom_point(col = "#6F263D") +
+  labs(x = "age", y = "Corsi Percentage") +
+  scale_y_continuous(labels = scales::percent) +
+  theme_minimal()
+```
+
+## TOI by Positions
+
+What is a distribution of TOI by position?
+
+```{r}
+p <- ggplot(data = nhl_data %>% 
+              dplyr::mutate(., toi = as.numeric(toi)) %>% 
+              dplyr::filter(., toi >= 50, 
+                            !(pos %in% c("F", "W"))),
+            aes(x = toi, fill = pos))
+p + geom_density(alpha = .25) +
+  scale_fill_brewer("", palette = "Set1") +
+  labs(x = "time on ice (min)")
+```
+
+```{r}
+p <- ggplot(data = nhl_data %>% 
+              dplyr::mutate(., toi = as.numeric(toi)) %>% 
+              dplyr::filter(., toi >= 200, 
+                            !(pos %in% c("F", "W"))),
+            aes(x = toi, fill = pos))
+p + geom_density() +
+  facet_grid(pos ~ .) +
+  scale_fill_brewer("", palette = "Set1") +
+  labs(x = "time on ice (min)") +
+  guides(fill = F)
+
+```
+
+How about the top Corsi percent per year?
+
+```{r}
+top_cor <- nhl_data %>%
+  dplyr::mutate(., toi = as.numeric(toi),
+                cf_percent = as.numeric(cf_percent)) %>% 
+  dplyr::filter(toi >= 200) %>%
+  dplyr::group_by(season, pos) %>%
+  dplyr::summarize(max_corsi = max(cf_percent))
+```
+
+Suppose we want to know who had the max Corsi by position? The above df doesn't
+give us the entire data_frame associated with this entry? How can we find that? Here's a trick. 
+
+```{r}
+top_cor <- nhl_data %>%
+  dplyr::mutate(., toi = as.numeric(toi),
+                cf_percent = as.numeric(cf_percent)) %>% 
+  dplyr::filter(toi >= 200) %>%
+  dplyr::group_by(season, pos) %>%
+  dplyr::filter(cf_percent == max(cf_percent)) %>%
+  dplyr::select(season, player, pos, tm, cf_percent) %>%
+  dplyr::arrange(pos, season)
+```
+
+```{r}
+p <- nhl_data %>%
+  dplyr::mutate(toi = as.numeric(toi),
+                cf_percent = as.numeric(cf_percent),
+                season = as.numeric(season)) %>% 
+  dplyr::filter(toi >= 200) %>%
+  dplyr::group_by(season, pos) %>%
+  dplyr::summarize(avg_corsi = mean(cf_percent)) %>%
+  ggplot(aes(x = season, y = avg_corsi, col = pos))
+p + geom_line() +
+  geom_point() +
+  scale_color_brewer("", palette = "Dark2") +
+  labs(y = "mean Corsi") +
+  scale_x_continuous(breaks = 2008:2022)
+```
+
+
+## Scraping hockey-reference.com
+
+### Basic Statistics
+```{r}
+nhl_url <- "https://www.hockey-reference.com/leagues/NHL_2022_skaters.html"
+pg <- xml2::read_html(nhl_url)
+nhl_stats <- rvest::html_table(pg, fill = TRUE)[[1]]
+names(nhl_stats) <- nhl_stats[1, ]
+nhl_stats_2 <- janitor::clean_names(nhl_stats) %>%
+  dplyr::filter(., rk != "Rk")
+```
+
+Now check out the file `w08-th-hrc-data.R`. What are we doing there?
+
+## Roster Information
+
+```{r}
+team <- "COL"
+year <- 2022
+url <- paste("http://www.hockey-reference.com/teams/",
+             team, 
+             "/",
+             year, 
+             ".html", 
+             sep = "")
+# url <- "http://www.hockey-reference.com/teams/COL/2022.html"
+pg <- xml2::read_html(url) 
+
+tables <- pg %>% 
+  rvest::html_table()
+
+links <- pg %>%
+  rvest::html_nodes(xpath = '//*[(@id = "roster")]//a') %>%
+  rvest::html_attr('href')
+links
+```
+
+```{r}
+tb <- xml2::read_html(url) %>%
+  rvest::html_table()
+
+tb_2 <- xml2::read_html(url) %>%
+  rvest::html_node(xpath = '//*[(@id = "roster")]') %>%
+  rvest::html_table() 
+```
+
+## Player Links
+
+```{r}
+get_hrc_player_links <- function(team, year = 2022){
+  url <- paste("https://www.hockey-reference.com/teams/", team, "/", 
+               year, ".html", sep = "")
+  pg <- read_html(url) 
+  links <- pg %>%
+    html_nodes(xpath = '//*[(@id = "roster")]//a') %>%
+    html_attr('href')
+  team_data <- pg %>%
+    html_table() %>%
+    .[[3]] %>% 
+    bind_cols(tibble(links = links))
+  return(team_data)
+}
+```
+
+
+```{r}
+col_data <- get_hrc_player_links("COL")
+```
+
+## NHL Data Game-by-Game Data
+
+Unfortunately, the game-by-game player data has a different form on the URL. 
+Check out [Nathan MacKinnon's game info here](https://www.hockey-reference.com/players/m/mackina01/gamelog/2021)
+
+OK, let's look at how we can construct a url from the player link returned by
+the function given above. Recall that the Nathan MacKinnon's link is
+
+```{r}
+col_data %>%
+  dplyr::filter(stringr::str_detect(Player, "Nathan MacKinnon")) %>%
+  dplyr::pull(links)
+```
+
+If we wanted to iterate across all players to get game-by-game data, we can 
+utilize the `str_replace()` function from the `stringr` package. For example, 
+
+```{r}
+col_data <- col_data %>%
+  mutate(game_link = stringr::str_replace(links, ".html", "/gamelog/2022"))
+```
+
+```{r}
+col_data %>%
+  dplyr::filter(Player == "Nathan MacKinnon") %>%
+  dplyr::pull(game_link)
+```
+
+
+```{r}
+mac_url <- paste("https://www.hockey-reference.com",
+                 "/players/m/mackina01/gamelog/2022",
+                 sep = "") 
+mac_url
+
+mac_url <- paste("https://www.hockey-reference.com",
+                 col_data %>%
+                   dplyr::filter(Player == "Nathan MacKinnon") %>%
+                   dplyr::pull(game_link),
+                 sep = "") 
+
+mac_stats <- xml2::read_html(mac_url) %>%
+  rvest::html_table() %>%
+  .[[1]]
+names(mac_stats) <- mac_stats[1, ]
+mac_stats <- mac_stats %>% 
+  janitor::clean_names() %>%
+  dplyr::filter(rk != "Rk") %>%
+  dplyr::mutate(date = lubridate::ymd(date))
+```
+
+Note that all of the "numeric" data does not seem to be numeric. How can we 
+convert these fields to numeric data?
+
+```{r}
+mac_stats[c(3, 9:23, 25:29)] <- lapply(mac_stats[c(3, 9:23, 25:29)],
+                                       as.numeric)
+```
+
+Look at pts per shift.
+```{r}
+p <- ggplot(data = mac_stats,
+            aes(x = date, y = pts/shft))
+p + geom_point() +
+  facet_wrap(~ x_2, ncol = 2) +
+  labs(x = "game date",
+       y = "points per shift")
+```
+
+Look at pts per shift colored by opponent. This is admittedly a little hard to 
+digest. 
+```{r}
+p <- ggplot(data = mac_stats,
+            aes(x = date, y = pts/shft, col = opp))
+p + geom_point() +
+  facet_wrap(~ x_2, ncol = 2) +
+  labs(x = "game date",
+       y = "points per shift")
+```
+
+## Using `nhlapi`
+
+We looked at the tools used to scrape hockey-reference.com in the previous two
+classes, but is there a tool that can acquire data directly from the NHL itself?
+Why yes there is. That tool, in R, is `nhlapi` package. Download and install the
+R package and we'll get to it. The API itself is a little hard to digest, so
+this is a really great software project in that it parses through a ton of info
+in order to tease out the relevant data.
+
+### Teams
+
+First, if you want a list of teams, use the following. Note that this function 
+will just access the latest official list of teams (e.g., Seattle Kraken is 
+listed). 
+
+```{r}
+teams <- nhlapi::nhl_teams()
+```
+
+### Rosters
+
+From the previous function call, we see that the Avs have the `ID = 21`. How can
+we use this in order to access their roster? It's not a trivial as just using
+the `nhl_teams_rosters()` with the appropriate `teamIDs`. 
+
+```{r}
+avs_roster <- nhlapi::nhl_teams_rosters(teamIds = 21)
+```
+
+The roster is actually found in the `$roster.roster` object in the `avs_roster`
+object. Say what? Yeah, it's bizarre. Take a look. 
+
+```{r}
+avs_roster_df <- avs_roster$roster.roster[[1]]
+```
+
+Is there a way to get all of the teams' rosters in a single data frame? Yep.
+
+```{r}
+all_rosters <- nhlapi::nhl_teams_rosters()
+df <- dplyr::bind_rows(all_rosters$roster.roster)
+```
+
+This solution doesn't give us the team names though. How do we get that as well?
+
+```{r}
+num_players <- unlist(lapply(all_rosters$roster.roster, 
+                             FUN = function(x) dim(x)[[1]]))
+
+df <- df %>% 
+  dplyr::mutate(., teamName = rep(all_rosters$name[1:32], times = num_players))
+```
+
+## Statistics
+This is a data-focused class, so how do we get actual team, player, or game 
+statistics. We'll start with the team stats. 
+
+### Team Stats
+
+You can access an individual team's or all teams' statistics for one or 
+multiple seasons. Let's get the last two seasons of data for all teams.  
+
+```{r}
+team_stats <- nhlapi::nhl_teams_stats(teamIds = NULL, seasons = 2021)
+```
+Again, it comes in as a weird data frame (actually a list) and the individual 
+stats are given in the `teamStats` field of this list. So we need to bind the 
+rows from those individual data frames.
+
+```{r}
+team_stats_df <- purrr::map_df(team_stats$teamStats, 
+                               function(x){
+                                 return(x[[1]])
+                               }) %>% 
+  dplyr::filter(., stat.gamesPlayed != "NA") %>% 
+  dplyr::mutate(., season = rep(2021, each = 32))
+```
+
+A plot:
+
+```{r}
+p <- ggplot(data = team_stats_df %>% 
+              dplyr::filter(., season == 2021),
+            aes(x = stat.powerPlayGoals, 
+                y = stat.powerPlayGoalsAgainst, 
+                col = team.name,
+                text = paste('PPG: ', stat.powerPlayGoals, '\n',
+                             'PPGA: ', stat.powerPlayGoalsAgainst, sep = "")))
+p + geom_point() +
+  labs(x = "power play goals",
+       y = "power play goals against")
+```
+
+### Player Stats
+
+Now let's take a look at the individual player statistics. We will use the 
+`nhl_players()`, `nhl_players_seasons()`, and `nhl_players_allseasons()`
+functions to obtain individual player statistics. Let's get the statistics for
+the Colorado Avs. 
+
+
+```{r}
+avs_stats <- nhlapi::nhl_players_allseasons(playerIds = avs_roster_df$person.id)
+```
+It's probably a good idea to join these date to the roster info in order to get
+the player's name on there. 
+
+```{r}
+#avs_stats <- nhl_players_allseasons(playerIds = avs_roster_df$person.id) 
+avs_stats <-  dplyr::inner_join(avs_roster_df %>% 
+                                  dplyr::select(., person.id, person.fullName),
+                                avs_stats, 
+                                by = c("person.id" = "playerId"))
+```
+
+It's kind of amazing what's in there. Take a look at Logan O'Connor. 
+
+```{r, eval = F}
+View(avs_stats %>% dplyr::filter(., person.fullName == "Logan O'Connor"))
+```
+
+We should probably look at the NHL data. 
+
+```{r}
+avs_stats <- avs_stats %>% 
+  dplyr::filter(., league.name == "National Hockey League")
+```
+
+```{r}
+p <- ggplot(data = avs_stats %>% 
+              dplyr::filter(., person.fullName %in% 
+                              c("Nathan MacKinnon", "Mikko Rantanen")) %>% 
+              dplyr::mutate(., year = as.numeric(substr(season, 1, 4))),
+            aes(x = year, y = stat.points, col = person.fullName))
+p + geom_line() +
+  geom_point() +
+  labs(x = "year", y = "points", col = "") +
+  scale_color_brewer(palette = "Set1") + 
+  scale_x_continuous(breaks = 2012:2022) +
+  theme_minimal()
+```
+
+```{r}
+p <- ggplot(data = avs_stats %>% 
+              dplyr::mutate(., year = as.numeric(substr(season, 1, 4))),
+            aes(x = year, y = stat.points, col = person.fullName))
+p + geom_line() +
+  geom_point() +
+  labs(x = "year", y = "points", col = "player") +
+  theme_minimal()
+```
+
+
+### Shot Charts
+
+Now we will consider a shot chart for all Avs' games this year. Note that the 
+first function, `nhl_schedule_seasons()`, will return game IDs in the `gamePk`
+field. An ID is read as YYYYSSGGGG where YYYY denotes the year (e.g. 2020), 
+SS is the type of game (01 is preseason, 02 is regular season, 03 is playoffs,
+and 04 is the all star game). 
+
+```{r, cache = T}
+avs_games <- nhlapi::nhl_schedule_seasons(seasons = 2021, teamIds = 21)[[1]]$dates
+
+avs_game_ids <- dplyr::bind_rows(avs_games$games) %>% 
+  dplyr::pull(gamePk)
+
+game_feeds <- lapply(avs_game_ids, nhlapi::nhl_games_feed)
+
+plays <- purrr::map_df(game_feeds,
+                       function(x){
+                         return(x[[1]][["liveData"]][["plays"]][["allPlays"]])
+                       })
+
+goals <- plays %>% 
+  dplyr::filter(., !is.na(coordinates.x),
+                result.event == "Goal")
+
+nhl_rink <- sportyR::geom_hockey('nhl')
+
+# Add the shot locations
+nhl_rink +
+  geom_point(data = goals, aes(x = coordinates.x, y = coordinates.y), 
+             color = '#2251b8', alpha = .5) +
+  labs(caption = "")
+```
+
+```{r}
+avs_goals <- plays %>% 
+  dplyr::filter(., !is.na(coordinates.x),
+                result.event == "Goal",
+                team.name == "Colorado Avalanche")
+
+nhl_rink <- geom_hockey('nhl')
+
+# Add the shot locations
+nhl_rink +
+  geom_point(data = avs_goals, aes(coordinates.x, coordinates.y), 
+             color = '#2251b8', alpha = .5) +
+  labs(caption = "")
+```
+
+
+```{r}
+avs_goals <- plays %>% 
+  dplyr::mutate(., avs = ifelse(team.name == "Colorado Avalanche", T, F)) %>% 
+  dplyr::filter(., !is.na(coordinates.x),
+                result.event == "Goal")
+
+nhl_rink <- geom_hockey('nhl')
+
+# Add the shot locations
+nhl_rink +
+  geom_point(data = avs_goals, aes(coordinates.x, coordinates.y, col = avs), 
+             alpha = .5) +
+  scale_color_brewer(palette = "Set1") +
+  labs(caption = "")
+```
+
+
+## Exercises
+
+## NHL, Corsi, and PDO
+
+For problems 1 and 2, use the `nhl_data` that we used at the beginning part of
+the class. 
+
+### Problem 1
+
+What team won the Stanley Cup in 2017 (use Google)? Find the player who had the
+highest percent Corsi value on that team. Interpret the value. Note: My friend was 
+their director of hockey research and got to spend a day with the Stanley Cup. 
+
+### Answer 1
+
+Pittsburgh. 
+
+```{r}
+nhl_data %>%
+  filter(tm == "PIT", 
+         season == "2017") %>% 
+  select(player, cf_percent) %>%
+  arrange(desc(as.numeric(cf_percent)))
+```
+
+### Problem 2
+
+Find the correlation between Corsi percent, Fenwick percent, and PDO using the 
+entire data set. Filter out all NAs on those holes (use `na_omit`).
+
+### Answer 2
+
+```{r}
+tmp <- nhl_data %>%
+  select(cf_percent, ff_percent, pdo) %>%
+  mutate(cf_percent = as.numeric(cf_percent),
+         ff_percent = as.numeric(ff_percent),
+         pdo = as.numeric(pdo)) %>% 
+  na.omit()
+cor(tmp)
+```
+
+### Problem 3
+
+Write a function (call it `get_player_url`) that takes a team and year as inputs
+and returns the player names, positions, and the player urls from
+[hockey-reference.com](https://www.hockey-reference.com) for that team/year 
+combination. 
+
+### Answer 3
+
+```{r}
+get_player_url <- function(team, year){
+  url <- paste("http://www.hockey-reference.com/teams/",
+               team, "/", year, ".html", sep = "")
+  pg <- read_html(url) 
+  
+  links <- html_nodes(pg, xpath = '//*[(@id = "roster")]//a') %>%
+    html_attr('href')
+  
+  names <- read_html(url) %>%
+    html_node(xpath = '//*[(@id = "roster")]') %>%
+    html_table() 
+  
+  return(tibble(player = names$Player, 
+                pos = names$Pos, 
+                player_url = paste("https://www.hockey-reference.com",
+                                   links, sep = "")))
+}
+```
+
+### Problem 4
+
+Use this function to scrape the basic statistics for Nathan MacKinnon 
+and Mikko Rantanen's careers. Plot shots on goal (s) normalized by time 
+on ice (toi) as a function of their age. 
+
+### Answer 4
+
+You will need to:
+
+1. Get the urls using your function in 3
+2. Use `read_html` on the url
+3. Pipe that result to `html_table`.
+4. Rename the df using something like `names(player_stats) <- player_stats[1, ]`
+5. Clean the names
+6. Some filtering of rows is necessary
+7. Mutate the individual df's to add a column for the player's name.
+8. Combine the data using `bind_rows`
+9. Make sure the columns of data are of type `numeric`, otherwise it won't 
+plot.
+9. Plot it. 
+
+
+```{r}
+mac <- "https://www.hockey-reference.com/players/m/mackina01.html"
+mik <- "https://www.hockey-reference.com/players/r/rantami01.html"
+
+mac_stats <- read_html(mac) %>%
+  html_table() %>%
+  .[[1]]
+names(mac_stats) <- mac_stats[1, ]
+mac_stats <- mac_stats[-1, ] %>%
+  janitor::clean_names() %>%
+  dplyr::filter(., season != "Career", age != "") %>%
+  dplyr::mutate(Name = "Nathan Mackinnon")
+
+mik_stats <- read_html(mik) %>%
+  html_table() %>%
+  .[[1]]
+names(mik_stats) <- mik_stats[1, ]
+mik_stats <- mik_stats[-1, ] %>%
+  janitor::clean_names() %>%
+  dplyr::filter(., season != "Career", age != "") %>%
+  dplyr::mutate(., Name = "Mikko Rantanen")
+df <- bind_rows(mac_stats, mik_stats)
+```
+
+```{r}
+p <- ggplot(data = df,
+            aes(x = as.numeric(age), y = as.numeric(s)/as.numeric(toi), 
+                col = Name))
+p + geom_point() +
+  geom_line() +
+  scale_color_brewer("", palette = "Set1") +
+  labs(x = "age",
+       y = "(shots on goal)/(time on ice)")
+```
+
+### Problem 5
+
+Create a shot chart for the Colorado Avalanche for their 2022 postseason games. 
+Recall that `nhl_schedule_seasons()`, will return game IDs in the 
+`gamePk` field. An ID is read as YYYYSSGGGG where YYYY denotes the year (e.g.
+2022), SS is the type of game (01 is preseason, 02 is regular season, 03 is 
+playoffs, and 04 is the all star game). 
+
+### Answer 5
+```{r, cache=TRUE}
+avs_games <- nhl_schedule_seasons(seasons = 2021, teamIds = 21)[[1]]$dates
+
+avs_game_ids <- bind_rows(avs_games$games) %>% 
+  dplyr::pull(gamePk)
+
+index <- substr(avs_game_ids, 5, 6) == "03"
+avs_playoff_ids <- avs_game_ids[index]
+
+playoff_feeds <- lapply(avs_playoff_ids, nhlapi::nhl_games_feed)
+
+plays <- purrr::map_df(playoff_feeds,
+                       function(x){
+                         return(x[[1]][["liveData"]][["plays"]][["allPlays"]])
+                       })
+shots <- plays %>% 
+  dplyr::filter(., !is.na(coordinates.x),
+                result.event %in% c("Shot", "Missed Shot", "Blocked Shot", "Goal"),
+                team.name == "Colorado Avalanche")
+
+nhl_rink <- geom_hockey('nhl')
+
+# Add the shot locations
+nhl_rink +
+  geom_point(data = shots, aes(coordinates.x, coordinates.y), 
+             alpha = .5) +
+  scale_color_brewer(palette = "Set1") +
+  labs(caption = "")
+```
+
+### Problem 6
+
+How many goals has each team scored in these games?
+
+### Answer 6
+
+```{r}
+goals <- plays %>% 
+  dplyr::filter(., !is.na(coordinates.x),
+                result.event == "Goal") %>% 
+  dplyr::group_by(., team.name) %>% 
+  dplyr::summarize(., n = n())
+goals
+```
+
+### Problem 7
+
+Plot all Avs' shots but change the point type and color based on a goal versus 
+not a goal.
+
+### Answer 7
+
+```{r}
+nhl_rink <- geom_hockey('nhl')
+
+# Add the shot locations
+nhl_rink +
+  geom_point(data = shots %>% 
+               dplyr::mutate(., is_goal = ifelse(result.event == "Goal", T, F)), 
+             aes(coordinates.x, coordinates.y, col = is_goal, shape = is_goal), 
+             alpha = .5) +
+  scale_color_brewer("goal", palette = "Dark2") +
+  labs(caption = "") +
+  guides(shape = "none")
+```
+
+
