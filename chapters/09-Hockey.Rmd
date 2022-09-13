@@ -152,7 +152,7 @@ What is a distribution of TOI by position?
 ```{r}
 p <- ggplot(data = nhl_data %>% 
               dplyr::mutate(., toi = as.numeric(toi)) %>% 
-              dplyr::filter(., toi >= 50, 
+              dplyr::filter(., toi >= 200, 
                             !(pos %in% c("F", "W"))),
             aes(x = toi, fill = pos))
 p + geom_density(alpha = .25) +
@@ -183,6 +183,7 @@ top_cor <- nhl_data %>%
   dplyr::filter(toi >= 200) %>%
   dplyr::group_by(season, pos) %>%
   dplyr::summarize(max_corsi = max(cf_percent))
+top_cor
 ```
 
 Suppose we want to know who had the max Corsi by position? The above df doesn't
@@ -197,6 +198,7 @@ top_cor <- nhl_data %>%
   dplyr::filter(cf_percent == max(cf_percent)) %>%
   dplyr::select(season, player, pos, tm, cf_percent) %>%
   dplyr::arrange(pos, season)
+top_cor
 ```
 
 ```{r}

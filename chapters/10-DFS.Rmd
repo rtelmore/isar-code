@@ -1,0 +1,365 @@
+---
+title: "Daily Fantasy Sports Lineup Selection"
+author: "Ryan Elmore"
+date: "`r format(Sys.Date(), '%d %b %Y')`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r knitr-options, include = FALSE}
+knitr::opts_chunk$set(fig.align="center",
+                      warning = FALSE,
+                      message = FALSE,
+                      comment = NA)
+```
+
+```{r libs, include=FALSE}
+library(lubridate)
+library(janitor)
+library(lpSolve)
+library(ggplot2)
+```
+
+## Daily Fantasy Sports
+
+Let's read in the data that I downloaded from Draftkings for Game 6 of the 2022
+NHL Playoffs between the New York Rangers and the Carolina Hurricanes. This is 
+a Draftkings Showdown game. I am simplifying this problem in order to illustrate
+how optimization works in R. You will have an opportunity to solve a more 
+realistic problem later in the lab. 
+
+```{r}
+df <- read.csv("../data/DKSalaries-NYR-CAR.csv") %>%
+  janitor::clean_names() %>%
+  dplyr::filter(., roster_position == "FLEX")
+#saveRDS(df, "../data/draftkings.rds")
+```
+
+## Optimization
+
+### Objective Function
+
+Ideally, you would want to change this to something other than what the website
+suggests! (The coefficients of this function.)
+
+```{r}
+### Ei
+obj <- df$avg_points_per_game
+```
+
+### Constraints: Lineups, Salary, Teams (coefficients)
+
+1. We need 6, and only 6, players.  
+2. Salary is contained in `df$Salary`
+3. We need players from both teams
+
+In R:
+
+#### Left Hand Side
+
+The following code will create a coefficient matrix. Note that each line 
+represents the coefficients of our constraint inequalities. 
+
+```{r}
+cons <- rbind(rep(1, nrow(df)), #player constraint
+              df$salary, #salary constraint
+              t(model.matrix(~ team_abbrev + 0, df))) # team contraints
+```
+
+#### Direction
+
+A simple vector to represent the direction of these constraints. 
+
+```{r}
+dir <- c("=", "<=", ">=", ">=")
+```
+
+#### Right Hand Side
+
+A simple vector to represent the bounds on these constraints. 
+
+```{r}
+rhs <- c(6, 50000, 1, 1)
+```
+
+### Solution
+
+```{r}
+result <- lpSolve::lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+result
+```
+
+How do we find the actual solution? Our optimal team is:
+
+```{r}
+team <- df[which(result$solution == 1), ]
+team
+```
+
+What's wrong with this solution? We probably don't want multiple goalies, 
+particularly goalies from the same team. This would be a stupid thing to do.
+Let's add two more constraints to choose at most one goalie per team. (I would 
+argue that this is not a particularly great strategy. Why?)
+
+```{r}
+teams_mat <- t(model.matrix(~ team_abbrev + 0, df))
+goalies <- ifelse(df$position == "G", 1, 0)
+teams_goalies <- t(goalies * t(teams_mat))
+
+cons_tmp <- rbind(cons, teams_goalies)
+dir_tmp <- c(dir, "<=", "<=")
+rhs_tmp <- c(rhs, 1, 1)
+result <- lp("max", obj, cons_tmp, dir_tmp, rhs_tmp, all.bin = TRUE)
+result
+```
+
+```{r}
+team <- df[which(result$solution == 1), ]
+team
+```
+
+```{r}
+sum(team$salary)
+```
+
+OK, but neither of the two starting goalies are in these lineups. I really don't
+like losing when I play these games, so let's be a little more realistic. Filter
+out the non-starting goalies (starters: Antti Raanta and Igor Shesterkin).
+
+```{r}
+df_new <- df %>% 
+  dplyr::filter(., position != "G" | 
+                name %in% c("Antti Raanta", "Igor Shesterkin"))
+```
+
+```{r}
+obj <- df_new$avg_points_per_game
+cons <- rbind(rep(1, nrow(df_new)), #player constraint
+              df_new$salary, #salary constraint
+              t(model.matrix(~ team_abbrev + 0, df_new))) # team contraints
+dir <- c("=", "<=", ">=", ">=")
+rhs <- c(6, 50000, 1, 1)
+result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+result
+```
+
+```{r}
+team <- df_new[which(result$solution == 1), ]
+team
+```
+
+How can we find the next best? And the next? Or the top 100? Update our constraints! 
+
+```{r}
+results <- data.frame(P1 = rep(NA, 100),
+                      P2 = rep(NA, 100),
+                      P3 = rep(NA, 100),
+                      P4 = rep(NA, 100),
+                      P5 = rep(NA, 100),
+                      P6 = rep(NA, 100),
+                      points = rep(NA, 100),
+                      salary = rep(NA, 100))
+results[1, ] <- c(team$name, sum(team$avg_points_per_game), sum(team$salary))
+```
+
+```{r}
+for (i in 1:99){ ## 99 will give us 100 total teams
+  cons <- rbind(cons,
+                result$solution)
+  dir <- c(dir, "<=")
+  rhs <- c(rhs, 5)
+  result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+  team <- df_new[which(result$solution == 1), ]
+  results[i+1, ] <- c(team$name, sum(team$avg_points_per_game), sum(team$salary))
+}
+```
+
+### Actual Showdown
+
+```{r}
+df <- read.csv("../data/DKSalaries-NYR-CAR.csv") %>%
+  janitor::clean_names() %>% 
+  dplyr::filter(., position != "G" | 
+                  name %in% c("Antti Raanta", "Igor Shesterkin")) %>% 
+  dplyr::mutate(new_pts = ifelse(roster_position == "CPT",
+                                 1.5*avg_points_per_game,
+                                 avg_points_per_game))
+obj <- df$new_pts
+
+players_con <- t(model.matrix(~ name + 0, df))
+
+cons <- rbind(rep(1, nrow(df)), #6 players
+              df$salary, #<= 50000
+              t(model.matrix(~ team_abbrev + 0, df)), # at least one player from each team
+              ifelse(df$roster_position == "CPT", 1, 0), # one captain
+              players_con)
+#              ifelse(df$position == "G", 1, 0),
+
+dir <- c("=", "<=", ">=", ">=", "=", rep("<=", dim(players_con)[1]))
+rhs <- c(6, 50000, 1, 1, 1, rep(1, dim(players_con)[1]))
+result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+result
+```
+
+```{r}
+team <- df[which(result$solution == 1), ]
+team
+```
+
+### Problem 1
+
+Read in the Draftkings data for today's NHL game between the Edmonton Oilers and
+the Colorado Avalanche. Filter to just
+include the non-Captain players in order to keep things simple. Compute a
+scatter plot showing `salary` on the x axis and `avg_points_per_game`. Color the 
+points by `team_abbrev`.
+
+### Answer 1
+
+```{r}
+df <- read.csv("../data/DKSalaries-EDM-COL.csv") %>%
+  janitor::clean_names() %>% 
+  dplyr::filter(roster_position != "CPT")
+```
+
+```{r}
+p <- ggplot(df, aes(x = salary, y = avg_points_per_game, col = team_abbrev))
+p + geom_point() +
+  scale_color_brewer("Team", palette = "Set1") +
+  labs(x = "salary",
+       y = "average points per game") + 
+  theme_bw()
+```
+
+### Problem 2
+
+Find the team having the highest (aggregate) `avg_points_per_game`
+subject to: (1) we need at least one player from each team, (2) the team
+salary must be less than $50,000, and (3) we need at least six players total.
+What is the team, expected points, and salary? In addition, filter out 
+the non-starting goalies (starters: Darcy Kuemper and Mike Smith).
+
+```{r}
+df_new <- df %>% 
+  dplyr::filter(., position != "G" | 
+                name %in% c("Darcy Kuemper", "Mike Smith"))
+```
+
+```{r}
+obj <- df_new$avg_points_per_game
+cons <- rbind(rep(1, nrow(df_new)), #player constraint
+              df_new$salary, #salary constraint
+              t(model.matrix(~ team_abbrev + 0, df_new))) # team contraints
+dir <- c("=", "<=", ">=", ">=")
+rhs <- c(6, 50000, 1, 1)
+result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+result
+```
+
+```{r}
+team <- df_new[which(result$solution == 1), ]
+team
+```
+
+### Problem 3
+
+Suppose that I was bullish on the Avs given that they were playing at
+home. Find the best team (as above) that has at least four Avs and report
+the expected points.
+
+### Answer 3
+
+```{r}
+obj <- df_new$avg_points_per_game
+cons <- rbind(rep(1, nrow(df_new)),
+              df_new$salary,
+              t(model.matrix(~ team_abbrev + 0, df_new)))
+dir <- c("=", "<=", ">=", ">=")
+rhs <- c(6, 50000, 4, 1)
+result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+team <- df[which(result$solution == 1), ]
+team
+```
+
+### Problem 4
+
+Dang, this lineup doesn't have Cale Makar. Make sure that both Cale Makar and 
+Nathan MacKinnon are in my team. Remove the four Avs constraint. 
+
+### Answer 4
+
+```{r}
+obj <- df_new$avg_points_per_game
+cons <- rbind(rep(1, nrow(df_new)), #player constraint
+              df_new$salary, #salary constraint
+              t(model.matrix(~ team_abbrev + 0, df_new)), # team
+              ifelse(df_new$name %in% c("Cale Makar", "Nathan MacKinnon"), 1, 0))
+dir <- c("=", "<=", ">=", ">=", "=")
+rhs <- c(6, 50000, 1, 1, 2)
+result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+result
+team <- df_new[which(result$solution == 1), ]
+team
+```
+
+```{r}
+results <- data.frame(P1 = rep(NA, 9),
+                      P2 = rep(NA, 9),
+                      P3 = rep(NA, 9),
+                      P4 = rep(NA, 9),
+                      P5 = rep(NA, 9),
+                      P6 = rep(NA, 9),
+                      points = rep(NA, 9),
+                      salary = rep(NA, 9))
+results[1, ] <- c(team$name, sum(team$avg_points_per_game), sum(team$salary))
+```
+
+```{r}
+for (i in 1:9){ ## 4 will give us 5 total teams
+  cons <- rbind(cons,
+                result$solution)
+  dir <- c(dir, "<=")
+  rhs <- c(rhs, 5)
+  result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+  team <- df_new[which(result$solution == 1), ]
+  results[i+1, ] <- c(team$name, sum(team$avg_points_per_game), sum(team$salary))
+}
+```
+
+### Problem 5
+
+Let's take a look at the real showdown game. Find the top legitimate showdown
+lineup as we did in class. Again, only consider the starting goalies.
+
+```{r}
+df <- read.csv("../data/DKSalaries-EDM-COL.csv") %>%
+  janitor::clean_names() %>% 
+  dplyr::mutate(., new_pts = ifelse(roster_position == "CPT",
+                                    1.5*avg_points_per_game,
+                                    avg_points_per_game)) %>% 
+  dplyr::filter(., position != "G" | 
+                  name %in% c("Darcy Kuemper", "Mike Smith"))
+
+obj <- df$new_pts
+players_con <- t(model.matrix(~ name + 0, df))
+
+cons <- rbind(rep(1, nrow(df)),
+              df$salary,
+              t(model.matrix(~ team_abbrev + 0, df)),
+              ifelse(df$roster_position == "CPT", 1, 0),
+              players_con)
+#              ifelse(df$position == "G", 1, 0),
+
+dir <- c("=", "<=", ">=", ">=", "=", rep("<=", dim(players_con)[1]))
+rhs <- c(6, 50000, 1, 1, 1, rep(1, dim(players_con)[1]))
+result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+result
+```
+
+```{r}
+team <- df[which(result$solution == 1), ]
+team
+```
