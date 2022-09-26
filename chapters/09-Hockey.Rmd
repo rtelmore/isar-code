@@ -351,6 +351,9 @@ Look at pts per shift.
 p <- ggplot(data = mac_stats,
             aes(x = date, y = pts/shft))
 p + geom_point() +
+  scale_x_date(date_breaks = "1 month", date_minor_breaks = "1 week",
+               date_labels = "%B") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
   facet_wrap(~ x_2, ncol = 2) +
   labs(x = "game date",
        y = "points per shift")
@@ -358,13 +361,18 @@ p + geom_point() +
 
 Look at pts per shift colored by opponent. This is admittedly a little hard to 
 digest. 
-```{r}
+```{r, fig.height=8, fig.width=5.5}
 p <- ggplot(data = mac_stats,
             aes(x = date, y = pts/shft, col = opp))
 p + geom_point() +
+  scale_x_date(date_breaks = "1 month", date_minor_breaks = "1 week",
+               date_labels = "%B") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+
   facet_wrap(~ x_2, ncol = 2) +
   labs(x = "game date",
-       y = "points per shift")
+       y = "points per shift") +
+  theme(legend.position = "bottom")
 ```
 
 ## Using `nhlapi`
@@ -447,17 +455,18 @@ team_stats_df <- purrr::map_df(team_stats$teamStats,
 
 A plot:
 
-```{r}
+```{r, fig.height=8, fig.width=5.5}
 p <- ggplot(data = team_stats_df %>% 
               dplyr::filter(., season == 2021),
-            aes(x = stat.powerPlayGoals, 
-                y = stat.powerPlayGoalsAgainst, 
+            aes(x = as.numeric(stat.powerPlayGoals), 
+                y = as.numeric(stat.powerPlayGoalsAgainst), 
                 col = team.name,
                 text = paste('PPG: ', stat.powerPlayGoals, '\n',
                              'PPGA: ', stat.powerPlayGoalsAgainst, sep = "")))
 p + geom_point() +
   labs(x = "power play goals",
-       y = "power play goals against")
+       y = "power play goals against") +
+  theme(legend.position = "bottom")
 ```
 
 ### Player Stats
@@ -509,14 +518,15 @@ p + geom_line() +
   theme_minimal()
 ```
 
-```{r}
+```{r, fig.height=8, fig.width=5.5}
 p <- ggplot(data = avs_stats %>% 
               dplyr::mutate(., year = as.numeric(substr(season, 1, 4))),
             aes(x = year, y = stat.points, col = person.fullName))
 p + geom_line() +
   geom_point() +
   labs(x = "year", y = "points", col = "player") +
-  theme_minimal()
+  theme_minimal() +
+  theme(legend.position = "bottom")
 ```
 
 
