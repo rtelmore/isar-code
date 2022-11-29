@@ -455,7 +455,7 @@ team_stats_df <- purrr::map_df(team_stats$teamStats,
 
 A plot:
 
-```{r, fig.height=8, fig.width=5.5}
+```{r, fig.height=8, fig.width=9}
 p <- ggplot(data = team_stats_df %>% 
               dplyr::filter(., season == 2021),
             aes(x = as.numeric(stat.powerPlayGoals), 
@@ -518,7 +518,7 @@ p + geom_line() +
   theme_minimal()
 ```
 
-```{r, fig.height=8, fig.width=5.5}
+```{r, fig.height=8, fig.width=9}
 p <- ggplot(data = avs_stats %>% 
               dplyr::mutate(., year = as.numeric(substr(season, 1, 4))),
             aes(x = year, y = stat.points, col = person.fullName))

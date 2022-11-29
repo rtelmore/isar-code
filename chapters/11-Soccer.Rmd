@@ -1,0 +1,115 @@
+---
+title: "Chapter XXX -- Soccer"
+author: "Ryan Elmore"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r knitr-options, include = FALSE}
+knitr::opts_chunk$set(fig.align="center",
+                      warning = FALSE,
+                      message = FALSE,
+                      comment = NA)
+```
+
+```{r libs, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(rvest)
+library(janitor)
+library(scales)
+library(readr)
+library(nhlapi)
+library(purrr)
+library(sportyR)
+library(ggrepel)
+theme_set(theme_bw())
+```
+
+## Soccer Data
+
+### FB Reference 
+
+In October 2022, the Sports Reference website announced a partnership with 
+Stats Perform Opta to dramatically increase the quantity and quality of soccer, 
+or football, data that are available on its site. Soccer data are now hosted at
+https://fbref.com/en/ and includes data on most major professional leagues 
+throughout the world at a team and player level. More details related to this 
+new partnership can be found here. 
+
+https://www.sports-reference.com/blog/2022/10/fbref-leagues-🇵🇹-leagues-🇧🇷-leagues-🇲🇽-expanded-womens-and-mens-data-new-data-partner/
+
+In this chapter, we will focus on using soccer data to cluster both teams and 
+individual players using data from fbref.com. 
+
+## Expected Goals
+
+Similar to hockey to some extent, soccer is notoriously low-scoring and there is 
+certainly an element of luck in scoring a goal. Therefore, one of the main 
+developments in the soccer-analytics space is the introduction of Expected Goals, 
+or xG for short. There are various models to compute xG, but at a high level xG is
+simply the probability of scoring a goal from a given spot on the field when a 
+shot is taken.
+
+## Player Statistics
+
+We will initially focus our attention on clustering individual players from the 
+American NWSL. The NWSL is National Women's Soccer League and is the largest
+women's soccer league in North America. In the 2022 season there were twelve teams
+and the Portland Thorns were crowned champion. 
+
+We downloaded a csv file of the NWSL player statistics
+from the following fbref.com website and the data are also given in the book's R 
+package as `nwsl_player_stats`. Note that the column, or variable, names are defined 
+on the Football Reference website. https://fbref.com/en/comps/182/stats/NWSL-Stats
+
+
+```{r}
+nwsl_player_stats <- read.csv("../data/nwsl-players.csv", header = T) |> 
+  janitor::clean_names() |> 
+  dplyr::select(c(2:6, 8:10, 28:32)) |> 
+  dplyr::rename(xGp90 = x_g_1,
+                xAp90 = x_ag_1,
+                xGxAp90 = x_g_x_ag,
+                npxGp90 = npx_g_1,
+                npxGxAp90 = npx_g_x_ag_1)
+saveRDS(nwsl_player_stats, "../data/nwsl_player_stats.rds")
+```
+
+### Exploratory Data Analysis
+
+We will begin by exploring expected goals. In particular, let's look at xG by 
+age in the NWSL. We will use the `x_g_1` column as our xG value because it is the
+column representing the normalized xG value, normalizing xG per 90 minutes played. 
+
+```{r}
+p <- ggplot(data = nwsl_player_stats,
+            aes(x = age, y = xGp90))
+p + geom_point(alpha = .5) +
+  labs(x = "age", y = "expected goals (xG)") +
+  theme_bw()
+```
+One thing that we might want to do in plotting sports data is to identify the players
+that we are plotting. In this case, we can use the `ggrepel` package to quickly 
+add labels to certain points using the `label` aesthetic and the `geom_text_repel()`
+function. Suppose we want to identify
+players who are less than 20 years of age with a positive xG value, or have an xG 
+value greater than 0.6. 
+
+```{r}
+p <- ggplot(data = nwsl_player_stats |> 
+              dplyr::mutate(new_player = ifelse((age < 20 & xGp90 > 0) | xGp90 > 0.6,
+                            player, "")),
+            aes(x = age, y = xGp90, label = new_player))
+p + geom_point(alpha = .5) +
+  labs(x = "age", y = "expected goals (xG)") +
+  geom_text_repel() +
+  theme_bw()
+```
+
+
