@@ -28,10 +28,14 @@ library(nhlapi)
 library(purrr)
 library(sportyR)
 library(ggrepel)
+library(ggdendro)
 theme_set(theme_bw())
 ```
 
 ## Soccer Data
+
+In this chapter, we will explore several unsupervised learning methods, e.g. 
+hierarchical clustering, using several hockey data sets. 
 
 ### FB Reference 
 
@@ -49,7 +53,7 @@ individual players using data from fbref.com.
 
 ## Expected Goals
 
-Similar to hockey to some extent, soccer is notoriously low-scoring and there is 
+Similar to hockey, soccer is notoriously low-scoring and there is 
 certainly an element of luck in scoring a goal. Therefore, one of the main 
 developments in the soccer-analytics space is the introduction of Expected Goals, 
 or xG for short. There are various models to compute xG, but at a high level xG is
@@ -94,12 +98,12 @@ p + geom_point(alpha = .5) +
   labs(x = "age", y = "expected goals (xG)") +
   theme_bw()
 ```
-One thing that we might want to do in plotting sports data is to identify the players
-that we are plotting. In this case, we can use the `ggrepel` package to quickly 
-add labels to certain points using the `label` aesthetic and the `geom_text_repel()`
-function. Suppose we want to identify
-players who are less than 20 years of age with a positive xG value, or have an xG 
-value greater than 0.6. 
+One thing that we might want to do in plotting sports data is to identify the 
+players that we are plotting. In this case, we can use the `ggrepel` package to 
+quickly add labels to certain points using the `label` aesthetic and the
+`geom_text_repel()` function. Suppose we want to identify players who are less 
+than 20 years of age with a positive xG value, or have an xG value greater than 
+0.6. 
 
 ```{r}
 p <- ggplot(data = nwsl_player_stats |> 
@@ -107,9 +111,21 @@ p <- ggplot(data = nwsl_player_stats |>
                             player, "")),
             aes(x = age, y = xGp90, label = new_player))
 p + geom_point(alpha = .5) +
-  labs(x = "age", y = "expected goals (xG)") +
+  labs(x = "Age", y = "Expected goals (xG)") +
   geom_text_repel() +
   theme_bw()
 ```
 
+## Hierarchical Clustering
+
+```{r}
+nwsl_cluster_df <- nwsl_player_stats |> 
+  dplyr::select(player, age, starts, xGp90, xAp90, xGxAp90, npxGp90, npxGxAp90) |> 
+  na.omit() |> 
+  tibble()
+row.names(nwsl_cluster_df) <- nwsl_cluster_df$player
+hc <- hclust(dist(nwsl_cluster_df), "average")
+p <- ggdendrogram(hc, rotate = FALSE, size = 2)
+p
+```
 

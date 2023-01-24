@@ -1,0 +1,82 @@
+---
+title: "Golf"
+output: word_document
+date: "2023-01-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+#library(tidyr)
+library(fmsb)
+```
+
+```{r}
+df_tourney <- read.csv("../data/pga-tourney-level-raw-data.csv", 
+                       header = TRUE, sep = ",")
+# Read the 2022 ranking data into a data frame and merge it with existing data
+df_ranked <- read.csv("../data/owgr-230222.csv", header = TRUE, sep = ",")
+
+df <- left_join(df_tourney, df_ranked, by = "Player_initial_last")
+#clean the data so that any column with a ranking of NA is set to 301,
+#and any player who missed the cut with a POS of 999
+# In general, it's not a great idea to put in numeric values for NAs
+
+# df_merged$WGR_June_2022[is.na(df_merged$WGR_June_2022)] <- 301
+# df_merged$pos[is.na(df_merged$pos)] <- 999
+# #remove rows with missing SG data
+# df_merged <- na.omit(df_merged)
+
+#select the player names and the SG columns and WGR columns
+df_sub <- df |> 
+  select(Player_initial_last, sg_putt, sg_arg, sg_app, sg_ott, sg_t2g, sg_total,
+         WGR_June_2022)
+df_summarized <- df_sub |> 
+  group_by(Player_initial_last) |>
+  summarize(mean_sg_ott = mean(sg_ott, na.rm = TRUE),
+            mean_sg_app = mean(sg_app, na.rm = TRUE),
+            mean_sg_arg = mean(sg_arg, na.rm = TRUE),
+            mean_sg_putt = mean(sg_putt, na.rm = TRUE),
+            mean_WGR = mean(WGR_June_2022, na.rm = TRUE)) |> 
+  mutate(top_50 = ifelse(mean_WGR <= 50, T, F)) 
+```
+
+```{r}
+df_summarized_top_50 <- df_summarized |>
+  group_by(top_50) |> 
+  summarize(SGOTT = mean(mean_sg_ott, na.rm = TRUE),
+             SGAPP = mean(mean_sg_app, na.rm = TRUE),
+             SGARG = mean(mean_sg_arg, na.rm = TRUE),
+             SGPUTT = mean(mean_sg_putt, na.rm = TRUE))
+```
+
+```{r}
+#append and do data prep for FMSB for radar chart
+df_SG_radarchart <- data.frame(SGOTT= c(0.4, -0.5), 
+                               SGAPP = c(0.4, -0.5), 
+                               SGARG = c(0.4, -0.5), 
+                               SGPUTT = c(0.4, -0.5)) |> 
+  bind_rows(df_summarized_top_50 |> select(-top_50))
+```
+
+```{r}
+#draw radarchart
+areas <- c(rgb(1,0,0,.25), rgb(0,1,0,.25))
+radarchart(df_SG_radarchart,
+           title = "Shots Gained Metrics for Professional Golfers",
+           axistype = 1,
+           caxislabels = c("-0.6","-0.3", "0", "0.3", "0.6"),
+           plty=1,
+           pcol=2:3,
+           pfcol = areas)
+legend("topright",
+       legend = c("Not Top 50 Players", "Top 50 Players"),
+       bty="n", pch=20, col=areas,
+       text.col = "black", pt.cex = 2)
+```
+
+
