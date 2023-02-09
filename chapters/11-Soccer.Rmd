@@ -16,6 +16,10 @@ knitr::opts_chunk$set(fig.align="center",
                       comment = NA)
 ```
 
+```{r, eval=F}
+remotes::install_github("rtelmore/ISAR")
+```
+
 ```{r libs, include=FALSE}
 library(dplyr)
 library(ggplot2)
@@ -29,15 +33,16 @@ library(purrr)
 library(sportyR)
 library(ggrepel)
 library(ggdendro)
+library(ISAR)
 theme_set(theme_bw())
 ```
 
-## Soccer Data
+# Soccer Data
 
 In this chapter, we will explore several unsupervised learning methods, e.g. 
 hierarchical clustering, using several hockey data sets. 
 
-### FB Reference 
+## FB Reference 
 
 In October 2022, the Sports Reference website announced a partnership with 
 Stats Perform Opta to dramatically increase the quantity and quality of soccer, 
@@ -72,6 +77,9 @@ from the following fbref.com website and the data are also given in the book's R
 package as `nwsl_player_stats`. Note that the column, or variable, names are defined 
 on the Football Reference website. https://fbref.com/en/comps/182/stats/NWSL-Stats
 
+
+Here's how the data were obtained. Note, they are now located in the `ISAR` package
+under the `nwsl_player_stats` object. 
 
 ```{r}
 nwsl_player_stats <- read.csv("../data/nwsl-players.csv", header = T) |> 
@@ -116,16 +124,28 @@ p + geom_point(alpha = .5) +
   theme_bw()
 ```
 
-## Hierarchical Clustering
+## Clustering
+
+### Hierarchical Clustering
 
 ```{r}
 nwsl_cluster_df <- nwsl_player_stats |> 
-  dplyr::select(player, age, starts, xGp90, xAp90, xGxAp90, npxGp90, npxGxAp90) |> 
-  na.omit() |> 
-  tibble()
-row.names(nwsl_cluster_df) <- nwsl_cluster_df$player
+  dplyr::mutate(player_team = paste(player, squad, sep = "_")) |> 
+  dplyr::select(player, squad, player_team, age, starts, xGp90, xAp90, xGxAp90, 
+                npxGp90, npxGxAp90) |> 
+  na.omit()
+row.names(nwsl_cluster_df) <- nwsl_cluster_df$player_team
 hc <- hclust(dist(nwsl_cluster_df), "average")
 p <- ggdendrogram(hc, rotate = FALSE, size = 2)
 p
 ```
 
+### K-Means
+
+### Gaussian Mixtures
+
+## Exercises
+
+## Case Study
+
+## Lab
