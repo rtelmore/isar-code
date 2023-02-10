@@ -100,7 +100,8 @@ age in the NWSL. We will use the `x_g_1` column as our xG value because it is th
 column representing the normalized xG value, normalizing xG per 90 minutes played. 
 
 ```{r}
-p <- ggplot(data = nwsl_player_stats,
+p <- ggplot(data = nwsl_player_stats |> 
+              dplyr::filter(pos != "GK"),
             aes(x = age, y = xGp90))
 p + geom_point(alpha = .5) +
   labs(x = "age", y = "expected goals (xG)") +
@@ -115,6 +116,7 @@ than 20 years of age with a positive xG value, or have an xG value greater than
 
 ```{r}
 p <- ggplot(data = nwsl_player_stats |> 
+              dplyr::filter(pos != "GK") |> 
               dplyr::mutate(new_player = ifelse((age < 20 & xGp90 > 0) | xGp90 > 0.6,
                             player, "")),
             aes(x = age, y = xGp90, label = new_player))
@@ -125,6 +127,48 @@ p + geom_point(alpha = .5) +
 ```
 
 ## Clustering
+
+In this chapter we will focus on several analytical tools that fall under the  
+statistical, or machine learning umbrella of unsupervised learning. 
+
+### K-Means
+
+First let's look at a clustering based on age, min, and xGxAp90. We are going to
+consider three clusters initially. 
+
+```{r}
+nwsl_cluster_df <- nwsl_player_stats |> 
+  dplyr::mutate(player_team = paste(player, squad, sep = "_")) |> 
+  dplyr::select(player, squad, player_team, age, min, starts, xGp90, xAp90, xGxAp90, 
+                npxGp90, npxGxAp90) |> 
+  dplyr::filter(xGxAp90 < 1.5) |> 
+  na.omit()
+
+set.seed(9019)
+km <- kmeans(dplyr::select(nwsl_cluster_df, age, min, xGxAp90) |> 
+               na.omit(),
+             centers = 3)
+```
+
+How can we visualize these clusters? Let's plot age versus xGxAp90 and color these
+points by their clusters. 
+
+```{r}
+nwsl_cluster_df <- dplyr::mutate(nwsl_cluster_df, k_means = km$cluster)
+p <- ggplot(data = nwsl_cluster_df,
+            aes(x = age, y = xGxAp90, col = as.factor(k_means)))
+p + geom_point() +
+  scale_color_brewer("cluster", palette = "Dark2")
+```
+
+```{r}
+p <- ggplot(data = nwsl_cluster_df,
+            aes(x = min, y = age, col = as.factor(k_means)))
+p + geom_point() +
+  scale_color_brewer("cluster", palette = "Dark2")
+  
+
+```
 
 ### Hierarchical Clustering
 
@@ -140,7 +184,8 @@ p <- ggdendrogram(hc, rotate = FALSE, size = 2)
 p
 ```
 
-### K-Means
+
+
 
 ### Gaussian Mixtures
 
