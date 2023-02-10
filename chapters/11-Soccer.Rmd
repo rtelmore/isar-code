@@ -185,7 +185,7 @@ nwsl_cluster_df <- nwsl_player_stats |>
 set.seed(9019)
 km <- kmeans(dplyr::select(nwsl_cluster_df, min, starts, xGxAp90) |> 
                na.omit(),
-             centers = 3)
+             centers = 4)
 
 nwsl_cluster_df <- dplyr::mutate(nwsl_cluster_df, clusters = km$cluster)
 
