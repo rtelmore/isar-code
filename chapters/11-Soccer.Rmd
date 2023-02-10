@@ -133,6 +133,8 @@ statistical, or machine learning umbrella of unsupervised learning.
 
 ### K-Means
 
+#### With Age
+
 First let's look at a clustering based on age, min, and xGxAp90. We are going to
 consider three clusters initially. 
 
@@ -164,6 +166,43 @@ p + geom_point() +
 ```{r}
 p <- ggplot(data = nwsl_cluster_df,
             aes(x = min, y = age, col = as.factor(k_means)))
+p + geom_point() +
+  scale_color_brewer("cluster", palette = "Dark2")
+  
+
+```
+
+#### Without Age
+
+```{r}
+nwsl_cluster_df <- nwsl_player_stats |> 
+  dplyr::mutate(player_team = paste(player, squad, sep = "_")) |> 
+  dplyr::select(player, squad, player_team, age, min, starts, xGp90, xAp90, xGxAp90, 
+                npxGp90, npxGxAp90) |> 
+  dplyr::filter(xGxAp90 < 1.5) |> 
+  na.omit()
+
+set.seed(9019)
+km <- kmeans(dplyr::select(nwsl_cluster_df, min, starts, xGxAp90) |> 
+               na.omit(),
+             centers = 3)
+
+nwsl_cluster_df <- dplyr::mutate(nwsl_cluster_df, clusters = km$cluster)
+
+```
+
+```{r}
+p <- ggplot(data = nwsl_cluster_df,
+            aes(x = min, y = starts, col = as.factor(clusters)))
+p + geom_point() +
+  scale_color_brewer("cluster", palette = "Dark2")
+  
+
+```
+
+```{r}
+p <- ggplot(data = nwsl_cluster_df,
+            aes(x = starts, y = xGxAp90, col = as.factor(clusters)))
 p + geom_point() +
   scale_color_brewer("cluster", palette = "Dark2")
   
