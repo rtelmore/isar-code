@@ -141,15 +141,15 @@ consider three clusters initially.
 ```{r}
 nwsl_cluster_df <- nwsl_player_stats |> 
   dplyr::mutate(player_team = paste(player, squad, sep = "_")) |> 
-  dplyr::select(player, squad, player_team, age, min, starts, xGp90, xAp90, xGxAp90, 
-                npxGp90, npxGxAp90) |> 
-  dplyr::filter(xGxAp90 < 1.5) |> 
+  dplyr::select(player, squad, player_team, pos, age, min, starts, xGp90, xAp90, 
+                xGxAp90, npxGp90, npxGxAp90) |> 
+  dplyr::filter(xGxAp90 < 1.5, pos != "GK") |> 
   na.omit()
 
 set.seed(9019)
-km <- kmeans(dplyr::select(nwsl_cluster_df, age, min, xGxAp90) |> 
+km <- kmeans(dplyr::select(nwsl_cluster_df, age, min, xGp90, xAp90) |> 
                na.omit(),
-             centers = 3)
+             centers = 4)
 ```
 
 How can we visualize these clusters? Let's plot age versus xGxAp90 and color these
@@ -158,55 +158,81 @@ points by their clusters.
 ```{r}
 nwsl_cluster_df <- dplyr::mutate(nwsl_cluster_df, k_means = km$cluster)
 p <- ggplot(data = nwsl_cluster_df,
-            aes(x = age, y = xGxAp90, col = as.factor(k_means)))
+            aes(x = age, y = min, col = as.factor(k_means)))
 p + geom_point() +
   scale_color_brewer("cluster", palette = "Dark2")
 ```
 
 ```{r}
 p <- ggplot(data = nwsl_cluster_df,
-            aes(x = min, y = age, col = as.factor(k_means)))
+            aes(x = xGp90, y = xAp90, col = as.factor(k_means)))
 p + geom_point() +
   scale_color_brewer("cluster", palette = "Dark2")
   
 
 ```
 
-#### Without Age
+#### Without min
 
 ```{r}
 nwsl_cluster_df <- nwsl_player_stats |> 
   dplyr::mutate(player_team = paste(player, squad, sep = "_")) |> 
-  dplyr::select(player, squad, player_team, age, min, starts, xGp90, xAp90, xGxAp90, 
-                npxGp90, npxGxAp90) |> 
-  dplyr::filter(xGxAp90 < 1.5) |> 
+  dplyr::select(player, squad, player_team, pos, age, min, starts, xGp90, xAp90, 
+                xGxAp90, npxGp90, npxGxAp90) |> 
+  dplyr::filter(xGxAp90 < 1.5, pos != "GK") |> 
   na.omit()
 
 set.seed(9019)
-km <- kmeans(dplyr::select(nwsl_cluster_df, min, starts, xGxAp90) |> 
+km <- kmeans(dplyr::select(nwsl_cluster_df, age, xGp90, xAp90) |> 
                na.omit(),
-             centers = 4)
+             centers = 3)
 
 nwsl_cluster_df <- dplyr::mutate(nwsl_cluster_df, clusters = km$cluster)
-
 ```
 
 ```{r}
 p <- ggplot(data = nwsl_cluster_df,
-            aes(x = min, y = starts, col = as.factor(clusters)))
+            aes(x = age, y = xGp90, col = as.factor(clusters)))
 p + geom_point() +
   scale_color_brewer("cluster", palette = "Dark2")
-  
-
 ```
 
 ```{r}
 p <- ggplot(data = nwsl_cluster_df,
-            aes(x = starts, y = xGxAp90, col = as.factor(clusters)))
+            aes(x = age, y = xAp90, col = as.factor(clusters)))
 p + geom_point() +
   scale_color_brewer("cluster", palette = "Dark2")
-  
+```
 
+It's obvious that by including `age` and `minutes` seems to dominate
+the makeup of the clusters. So, if we are wanting to identify similar players 
+based on their scoring ability, let's only consider the appropriate metrics.
+
+```{r}
+set.seed(9019)
+km <- kmeans(dplyr::select(nwsl_cluster_df, xGp90, xAp90) |> 
+               na.omit(),
+             centers = 3)
+
+nwsl_cluster_df <- dplyr::mutate(nwsl_cluster_df, clusters = km$cluster)
+```
+
+
+```{r}
+p <- ggplot(data = nwsl_cluster_df,
+            aes(x = xAp90, y = xGp90, col = as.factor(clusters)))
+p + geom_point() +
+  scale_color_brewer("cluster", palette = "Dark2")
+```
+
+
+```{r}
+p <- ggplot(data = nwsl_cluster_df |> 
+              dplyr::mutate(short_pos = substr(pos, 1, 1)),
+            aes(x = xAp90, y = xGp90, shape = short_pos, col = as.factor(clusters)))
+p + geom_point(alpha = .75) +
+  scale_color_brewer("cluster", palette = "Dark2") +
+  labs(shape = "position")
 ```
 
 ### Hierarchical Clustering
