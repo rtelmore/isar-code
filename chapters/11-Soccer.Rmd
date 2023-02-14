@@ -81,7 +81,7 @@ on the Football Reference website. https://fbref.com/en/comps/182/stats/NWSL-Sta
 Here's how the data were obtained. Note, they are now located in the `ISAR` package
 under the `nwsl_player_stats` object. 
 
-```{r}
+```{r, eval = F}
 nwsl_player_stats <- read.csv("../data/nwsl-players.csv", header = T) |> 
   janitor::clean_names() |> 
   dplyr::select(c(2:6, 8:10, 28:32)) |> 
@@ -96,8 +96,10 @@ saveRDS(nwsl_player_stats, "../data/nwsl_player_stats.rds")
 ### Exploratory Data Analysis
 
 We will begin by exploring expected goals. In particular, let's look at xG by 
-age in the NWSL. We will use the `x_g_1` column as our xG value because it is the
-column representing the normalized xG value, normalizing xG per 90 minutes played. 
+age in the NWSL. We will use the `xGp90` column as our xG value because it is 
+the column representing the normalized xG value, normalizing xG per 90 minutes 
+played. In addition, we restrict our analysis to the non-goalkeeping position
+players as the goalkeepers are not likely to score or assist on a goal. 
 
 ```{r}
 p <- ggplot(data = nwsl_player_stats |> 
@@ -129,9 +131,14 @@ p + geom_point(alpha = .5) +
 ## Clustering
 
 In this chapter we will focus on several analytical tools that fall under the  
-statistical, or machine learning umbrella of unsupervised learning. 
+statistical, or machine, learning umbrella of unsupervised learning. If you are
+unfamiliar with statistical learning, in general, we recommend the excellent 
+text *An Introduction to Statistical Learning with Applications in R* by James, 
+Witten, Hastie, and Tibshirani. 
 
 ### K-Means
+
+
 
 #### With Age
 
@@ -234,6 +241,8 @@ p + geom_point(alpha = .75) +
   scale_color_brewer("cluster", palette = "Dark2") +
   labs(shape = "position")
 ```
+
+Do certain positions dominate certain clusters?
 
 ### Hierarchical Clustering
 
