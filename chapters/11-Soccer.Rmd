@@ -131,19 +131,18 @@ p + geom_point(alpha = .5) +
 ## Clustering
 
 In this chapter we will focus on several analytical tools that fall under the  
-statistical, or machine, learning umbrella of unsupervised learning. If you are
-unfamiliar with statistical learning, in general, we recommend the excellent 
-text *An Introduction to Statistical Learning with Applications in R* by James, 
-Witten, Hastie, and Tibshirani. 
+statistical, or machine, learning umbrella of unsupervised learning. Unsupervised
+learning is generally thought to be exploratory data analytic techniques that 
+are designed to learn as much as possible about the data without the aid of 
+labels as is the case in a regression or classification model (supervised 
+learning). Clustering, in particular, refers to the class of techniques concerned
+with finding groups within your data set that are similar (in some sense) with 
+respect to the measured variables (or covariates). 
 
 ### $K$-Means
 
 In short, $K$-means clustering refers to assigning each observation to one of 
-$K$ clusters. $K$-means is referred to as an unsupervised learning algorithm. 
-That is, an exploratory data analytic technique where we are trying to learn as 
-much as possible about the data without the aid of training data or labels as is
-using the case in a regression or classification model (supervised learning). The 
-number of clusters, $K$ is specified *a priori*. 
+$K$ clusters. The number of clusters, $K$ is specified *a priori*. 
 
 #### Clustering with Age
 
