@@ -136,14 +136,20 @@ unfamiliar with statistical learning, in general, we recommend the excellent
 text *An Introduction to Statistical Learning with Applications in R* by James, 
 Witten, Hastie, and Tibshirani. 
 
-### K-Means
+### $K$-Means
 
+In short, $K$-means clustering refers to assigning each observation to one of 
+$K$ clusters. $K$-means is referred to as an unsupervised learning algorithm. 
+That is, an exploratory data analytic technique where we are trying to learn as 
+much as possible about the data without the aid of training data or labels as is
+using the case in a regression or classification model (supervised learning). The 
+number of clusters, $K$ is specified *a priori*. 
 
+#### Clustering with Age
 
-#### With Age
-
-First let's look at a clustering based on age, min, and xGxAp90. We are going to
-consider three clusters initially. 
+First let's look at a clustering based on age of the player (age), total minutes 
+played in the season (min), and expected goals and assists per ninety minutes 
+played (xGxAp90). We are going to consider three clusters initially. 
 
 ```{r}
 nwsl_cluster_df <- nwsl_player_stats |> 
@@ -156,38 +162,56 @@ nwsl_cluster_df <- nwsl_player_stats |>
 set.seed(9019)
 km <- kmeans(dplyr::select(nwsl_cluster_df, age, min, xGp90, xAp90) |> 
                na.omit(),
-             centers = 4)
+             centers = 3)
 ```
 
-How can we visualize these clusters? Let's plot age versus xGxAp90 and color these
-points by their clusters. 
+How can we visualize these clusters? Let's plot age versus expected goals and 
+assists, and color these points by their clusters. 
 
 ```{r}
 nwsl_cluster_df <- dplyr::mutate(nwsl_cluster_df, k_means = km$cluster)
+
 p <- ggplot(data = nwsl_cluster_df,
             aes(x = age, y = min, col = as.factor(k_means)))
 p + geom_point() +
-  scale_color_brewer("cluster", palette = "Dark2")
+  scale_color_brewer("cluster", palette = "Dark2") +
+  labs(x = "Age of Player",
+       y = "Minutes Played")
 ```
+
+What stands out amongst this clustering of points? Clearly the clusters are 
+dominated by different age strata. It looks like the first cluster is composed
+of players that played more than approximately 1200 minutes, the second contains
+players playing (roughly) 500 to 1200 minutes, and finally the last cluster 
+contains players playing less than 500 minutes. 
+
+Is anything else evident if we omit minutes played and plot age of the player 
+versus expected goals and assists? 
 
 ```{r}
 p <- ggplot(data = nwsl_cluster_df,
-            aes(x = xGp90, y = xAp90, col = as.factor(k_means)))
+            aes(x = age, y = xGxAp90, col = as.factor(k_means)))
 p + geom_point() +
-  scale_color_brewer("cluster", palette = "Dark2")
+  scale_color_brewer("cluster", palette = "Dark2") +
+  labs(x = "Age of Player",
+       y = "Expected Goals and Assists per 90")
   
 
 ```
 
-#### Without min
+#### Remove Minutes Played
+
+Given that minutes played dominates the previous clustering, consider a 
+$K$-means clustering age, expected goals, and expected assists, both normalized
+by per ninety minutes played. 
 
 ```{r}
-nwsl_cluster_df <- nwsl_player_stats |> 
-  dplyr::mutate(player_team = paste(player, squad, sep = "_")) |> 
-  dplyr::select(player, squad, player_team, pos, age, min, starts, xGp90, xAp90, 
-                xGxAp90, npxGp90, npxGxAp90) |> 
-  dplyr::filter(xGxAp90 < 1.5, pos != "GK") |> 
-  na.omit()
+# nwsl_cluster_df <- nwsl_player_stats |> 
+#   dplyr::mutate(player_team = paste(player, squad, sep = "_")) |> 
+#   dplyr::select(player, squad, player_team, pos, age, min, starts, xGp90, xAp90, 
+#                 xGxAp90, npxGp90, npxGxAp90) |> 
+#   dplyr::filter(xGxAp90 < 1.5, pos != "GK") |> 
+#   na.omit()
 
 set.seed(9019)
 km <- kmeans(dplyr::select(nwsl_cluster_df, age, xGp90, xAp90) |> 
@@ -201,19 +225,30 @@ nwsl_cluster_df <- dplyr::mutate(nwsl_cluster_df, clusters = km$cluster)
 p <- ggplot(data = nwsl_cluster_df,
             aes(x = age, y = xGp90, col = as.factor(clusters)))
 p + geom_point() +
-  scale_color_brewer("cluster", palette = "Dark2")
+  scale_color_brewer("cluster", palette = "Dark2") +
+    labs(x = "Age of Player",
+       y = "Expected Goals per 90")
+
 ```
+
+As you might imagine, the clustering is now dominated by the age variable.  
+
 
 ```{r}
 p <- ggplot(data = nwsl_cluster_df,
             aes(x = age, y = xAp90, col = as.factor(clusters)))
 p + geom_point() +
-  scale_color_brewer("cluster", palette = "Dark2")
+  scale_color_brewer("cluster", palette = "Dark2") +
+    labs(x = "Age of Player",
+       y = "Expected Assists per 90")
+
 ```
 
 It's obvious that by including `age` and `minutes` seems to dominate
-the makeup of the clusters. So, if we are wanting to identify similar players 
-based on their scoring ability, let's only consider the appropriate metrics.
+the makeup of the clusters. So, if we want to identify similar players 
+based on their scoring ability, let's only consider the appropriate metrics. Here
+we separate the expected goals and assists (appropriately normalized) into their
+individual variables, `xGp90` and `xAp90`. 
 
 ```{r}
 set.seed(9019)
@@ -229,9 +264,16 @@ nwsl_cluster_df <- dplyr::mutate(nwsl_cluster_df, clusters = km$cluster)
 p <- ggplot(data = nwsl_cluster_df,
             aes(x = xAp90, y = xGp90, col = as.factor(clusters)))
 p + geom_point() +
-  scale_color_brewer("cluster", palette = "Dark2")
+  scale_color_brewer("cluster", palette = "Dark2") +
+    labs(x = "Expected Assists per 90",
+       y = "Expected Goals per 90")
+
 ```
 
+How do you relate this to position players? We can change the color and/or shape
+of the points based on position of the players. In this case for simplicity, I 
+changed the original position variable in the subsetted data set to just three 
+positions: defender (D), midfielder (M), and forward (F).
 
 ```{r}
 p <- ggplot(data = nwsl_cluster_df |> 
@@ -239,7 +281,22 @@ p <- ggplot(data = nwsl_cluster_df |>
             aes(x = xAp90, y = xGp90, shape = short_pos, col = as.factor(clusters)))
 p + geom_point(alpha = .75) +
   scale_color_brewer("cluster", palette = "Dark2") +
-  labs(shape = "position")
+  labs(shape = "position",
+       x = "Expected Assists per 90",
+       y = "Expected Goals per 90")
+
+```
+
+```{r}
+p <- ggplot(data = nwsl_cluster_df |> 
+              dplyr::mutate(short_pos = substr(pos, 1, 1)),
+            aes(x = xAp90, y = xGp90, col = short_pos, shape = as.factor(clusters)))
+p + geom_point(alpha = .75) +
+  scale_color_brewer("cluster", palette = "Dark2") +
+  labs(color = "position",
+       x = "Expected Assists per 90",
+       y = "Expected Goals per 90")
+
 ```
 
 Do certain positions dominate certain clusters?
@@ -265,6 +322,11 @@ p
 
 ## Exercises
 
+EDA
+1. Faceted density plots of xG, xA by position
+2. 
+
 ## Case Study
 
 ## Lab
+
