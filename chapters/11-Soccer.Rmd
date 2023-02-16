@@ -16,11 +16,11 @@ knitr::opts_chunk$set(fig.align="center",
                       comment = NA)
 ```
 
-```{r, eval=F}
+```{r, eval=F, include = F}
 remotes::install_github("rtelmore/ISAR")
 ```
 
-```{r libs, include=FALSE}
+```{r libs, include=T}
 library(dplyr)
 library(ggplot2)
 library(lubridate)
@@ -56,7 +56,7 @@ https://www.sports-reference.com/blog/2022/10/fbref-leagues-🇵🇹-leagues-�
 In this chapter, we will focus on using soccer data to cluster both teams and 
 individual players using data from fbref.com. 
 
-## Expected Goals
+## Expected Goals and Assists
 
 Similar to hockey, soccer is notoriously low-scoring and there is 
 certainly an element of luck in scoring a goal. Therefore, one of the main 
@@ -64,6 +64,14 @@ developments in the soccer-analytics space is the introduction of Expected Goals
 or xG for short. There are various models to compute xG, but at a high level xG is
 simply the probability of scoring a goal from a given spot on the field when a 
 shot is taken.
+
+Given that most shots do not result in a goal, most passes to a shot taker will 
+likely lead to a missed goal as well. Therefore, there is an analogous result for 
+assists that is referred to as Expected Assists, or xA for short. You will often
+see these metrics normalized to ninety minutes so that a player is a substitute 
+and only plays thirty minutes can be directly compared to a starter who might 
+play sixty - ninety minutes. The normalized expected goals and assists are often
+written as xG (xA) per ninety. 
 
 ## Player Statistics
 
@@ -142,7 +150,12 @@ respect to the measured variables (or covariates).
 ### $K$-Means
 
 In short, $K$-means clustering refers to assigning each observation to one of 
-$K$ clusters. The number of clusters, $K$ is specified *a priori*. 
+$K$ clusters. The number of clusters, $K$ is specified *a priori*. The algorithm
+for computing a $K$-means clustering of $n$ observations is relatively simple 
+and intuitive. Each observation is randomly assigned to one of the $K$ clusters
+and the "center" of each cluster is computed, e.g. the mean vector in $K$-means. 
+Next, you assign each observation to the closest "center", recompute the "center", 
+and reassign each observation until observations stop being reassigned. 
 
 #### Clustering with Age
 
@@ -321,11 +334,13 @@ p
 
 ## Exercises
 
-EDA
 1. Faceted density plots of xG, xA by position
-2. 
+2. Regress xGp90 and xAp90 on min to see if someone is not playing as much as 
+you might think they should play. 
 
 ## Case Study
 
 ## Lab
+
+
 
