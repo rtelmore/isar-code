@@ -350,7 +350,9 @@ mixture using the expected goals and expected assists variables.
 
 
 ```{r}
-mix_model <- mvnormalmixEM(nwsl_cluster_df[, c("age", "xGxAp90")], 
+nwsl_mix_df <- nwsl_cluster_df |> 
+  dplyr::filter(xGxAp90 < 2)
+mix_model <- mvnormalmixEM(nwsl_mix_df[, c("age", "xGxAp90")], 
                            arbvar = FALSE,
                            mu = list(c(25, .9), c(20, .5)),
                            epsilon = 1e-02,
@@ -367,10 +369,12 @@ mix_model$mu
 ```
 
 Let's add the centers to our scatterplot and color the points according to their 
-classification. 
+classification. The first variable (`pp`) would be our soft classification 
+probability whereas the `class` variable is a hard classification. We can 
+visualize both using some of the tools that we have used previously. 
 
 ```{r}
-nwsl_mix_df <- nwsl_cluster_df |> 
+nwsl_mix_df <- nwsl_mix_df |> 
   dplyr::mutate(pp = mix_model$posterior[, 1],
                 class = ifelse(pp <= .5, "one", "two"))
 
@@ -379,10 +383,21 @@ nwsl_mix_df <- nwsl_cluster_df |>
 
 ```{r}
 p <- ggplot(data = nwsl_mix_df,
-            aes(x = age, y = npxGp90, col = class))
+            aes(x = age, y = xGxAp90, col = class))
 p + geom_point() +
   scale_color_brewer(palette = "Set1") +
   labs(color = "cluster") +
+  theme_bw()
+```
+
+```{r}
+p <- ggplot(data = nwsl_mix_df,
+            aes(x = age, y = xGxAp90, col = pp))
+p + geom_point() +
+  scale_color_distiller(palette = "Set1", limits = c(0, 1)) +
+  labs(color = "cluster",
+       x = "Age",
+       y = "Expected Goals and Assists per 90") +
   theme_bw()
 ```
 
