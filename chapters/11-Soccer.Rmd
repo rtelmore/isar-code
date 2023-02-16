@@ -34,6 +34,7 @@ library(sportyR)
 library(ggrepel)
 library(ggdendro)
 library(ISAR)
+library(mixtools)
 theme_set(theme_bw())
 ```
 
@@ -328,9 +329,62 @@ p
 ```
 
 
-
-
 ### Gaussian Mixtures
+
+The two preceding clustering algorithms result in a "hard" clustering of 
+observations into groups as there is no room for ambiguity in the cluster 
+assignments. We now turn our attention to a probability-based clustering 
+algorithm based on mixtures of $K$ Gaussian distributions. The result is a "soft"
+clustering in which each observation is assigned to a cluster using a probability. 
+We write the probability of observation $\boldsymbol{x}_i$ belonging to cluster 
+$k = 1, 2, \dots, K$ as $P(x_i \in k)$, with 
+as 
+$$
+\sum_{i = 1}^KP(x_i \in k) = 1.
+$$
+Although the theoretical details of Gaussian mixture models are well beyond the 
+scope of this text, the implementation details are relatively straightforward. 
+We will use the `mixtools` R package to fit a Gaussian mixture model and make
+cluster assignments. We will start with a three-component, or three-cluster, 
+mixture using the expected goals and expected assists variables. 
+
+
+```{r}
+mix_model <- mvnormalmixEM(nwsl_cluster_df[, c("age", "xGxAp90")], 
+                           arbvar = FALSE,
+                           mu = list(c(25, .9), c(20, .5)),
+                           epsilon = 1e-02,
+                           verb = T)
+
+```
+
+```{r}
+head(mix_model$posterior)
+```
+
+```{r}
+mix_model$mu
+```
+
+Let's add the centers to our scatterplot and color the points according to their 
+classification. 
+
+```{r}
+nwsl_mix_df <- nwsl_cluster_df |> 
+  dplyr::mutate(pp = mix_model$posterior[, 1],
+                class = ifelse(pp <= .5, "one", "two"))
+
+```
+
+
+```{r}
+p <- ggplot(data = nwsl_mix_df,
+            aes(x = age, y = npxGp90, col = class))
+p + geom_point() +
+  scale_color_brewer(palette = "Set1") +
+  labs(color = "cluster") +
+  theme_bw()
+```
 
 ## Exercises
 
