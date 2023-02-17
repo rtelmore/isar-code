@@ -219,13 +219,6 @@ $K$-means clustering age, expected goals, and expected assists, both normalized
 by per ninety minutes played. 
 
 ```{r}
-# nwsl_cluster_df <- nwsl_player_stats |> 
-#   dplyr::mutate(player_team = paste(player, squad, sep = "_")) |> 
-#   dplyr::select(player, squad, player_team, pos, age, min, starts, xGp90, xAp90, 
-#                 xGxAp90, npxGp90, npxGxAp90) |> 
-#   dplyr::filter(xGxAp90 < 1.5, pos != "GK") |> 
-#   na.omit()
-
 set.seed(9019)
 km <- kmeans(dplyr::select(nwsl_cluster_df, age, xGp90, xAp90) |> 
                na.omit(),
@@ -337,15 +330,15 @@ assignments. We now turn our attention to a probability-based clustering
 algorithm based on mixtures of $K$ Gaussian distributions. The result is a "soft"
 clustering in which each observation is assigned to a cluster using a probability. 
 We write the probability of observation $\boldsymbol{x}_i$ belonging to cluster 
-$k = 1, 2, \dots, K$ as $P(x_i \in k)$, with 
+$k = 1, 2, \dots, K$ as $P(i^{th}\ \textrm{observation} \in k | x_i)$, with 
 as 
 $$
-\sum_{i = 1}^KP(x_i \in k) = 1.
+\sum_{i = 1}^KP(i^{th}\ \textrm{observation} \in k | x_i) = 1.
 $$
 Although the theoretical details of Gaussian mixture models are well beyond the 
 scope of this text, the implementation details are relatively straightforward. 
 We will use the `mixtools` R package to fit a Gaussian mixture model and make
-cluster assignments. We will start with a three-component, or three-cluster, 
+cluster assignments. We will start with a two-component, or two-cluster, 
 mixture using the expected goals and expected assists variables. 
 
 
@@ -354,14 +347,31 @@ nwsl_mix_df <- nwsl_cluster_df |>
   dplyr::filter(xGxAp90 < 2)
 mix_model <- mvnormalmixEM(nwsl_mix_df[, c("age", "xGxAp90")], 
                            arbvar = FALSE,
-                           mu = list(c(25, .9), c(20, .5)),
+                           mu = list(c(25, .9), c(30, .5)),
                            epsilon = 1e-02,
                            verb = T)
 
 ```
+The individual observations are clustered according to their estimated posterior 
+probabilities of cluster assignment. The `mix_model` model object stores these estimates 
+in the `posterior` object. Look at the first six values in this list.
+```{r}
+mix_model$posterior[1:20, ]
+```
+
+The first line in the `posterior` output shows 0.9999 and 0.0001 for `comp.1` and
+`comp.2`, respectively. These numbers represent the posterior probability of 
+belonging to the first and second components, or clusters. In particular, the model 
+classifies someone having `age = 23` and `xGxAp90 = 0` as belonging to the first 
+cluster given that the first cluster's posterior probability is greater than the 
+second. On the other hand, someone with `age = 32` and `xGxAp90 = 0.05` is 
+assigned to the second cluster. As mentioned above, this is referred to as a 
+"soft" clustering given that we are assigning group member ship based on the
+posterior probabilities. 
+
 
 ```{r}
-head(mix_model$posterior)
+nwsl_mix_df[1:20, c("age", "xGxAp90")]
 ```
 
 ```{r}
@@ -385,6 +395,9 @@ nwsl_mix_df <- nwsl_mix_df |>
 p <- ggplot(data = nwsl_mix_df,
             aes(x = age, y = xGxAp90, col = class))
 p + geom_point() +
+  geom_point(data = data.frame(age = c(24.6058637, 32.298319),
+                               xGxAp90 = c(0.1969978, 0.251486)),
+             aes(x = age, y = xGxAp90), col = "black", shape = 17, size = 3) +
   scale_color_brewer(palette = "Set1") +
   labs(color = "cluster") +
   theme_bw()
@@ -394,6 +407,10 @@ p + geom_point() +
 p <- ggplot(data = nwsl_mix_df,
             aes(x = age, y = xGxAp90, col = pp))
 p + geom_point() +
+    geom_point(data = data.frame(age = c(24.6058637, 32.298319),
+                               xGxAp90 = c(0.1969978, 0.251486)),
+             aes(x = age, y = xGxAp90), col = "black", shape = 17, size = 3) +
+
   scale_color_distiller(palette = "Set1", limits = c(0, 1)) +
   labs(color = "cluster",
        x = "Age",
@@ -401,15 +418,29 @@ p + geom_point() +
   theme_bw()
 ```
 
+```{r}
+mix_model <- mvnormalmixEM(nwsl_mix_df[, c("age", "xGxAp90")], 
+                           arbvar = FALSE,
+                           mu = list(c(25, .9), c(20, .5), c(30, .1)),
+                           epsilon = 1e-02,
+                           verb = T)
+
+```
+```{r}
+mix_model$posterior[1:20,]
+```
+
 ## Exercises
 
 1. Faceted density plots of xG, xA by position
 2. Regress xGp90 and xAp90 on min to see if someone is not playing as much as 
 you might think they should play. 
+3. Cluster analysis based on EPL data: `epl_stats_2022` from R package
 
 ## Case Study
 
 ## Lab
+EPL Goalkeeper study using `epl_gk_stats_2022` from R package.
 
 
 
