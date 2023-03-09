@@ -16,7 +16,7 @@ knitr::opts_chunk$set(fig.align="center",
                       comment = NA)
 ```
 
-```{r, eval=F, include = F}
+```{r, eval=F, include = F, message = F}
 remotes::install_github("rtelmore/ISAR")
 ```
 
@@ -476,8 +476,8 @@ mix_model_2$loglik
 
 ## Exercises
 
-Most of the exercises will use `epl_team_stats` data set in the author's `ISAR` 
-R package. 
+Problems 1 - 5 of the exercises will use `epl_team_stats` data set in the 
+author's `ISAR` R package. Exercise six will use 
 
 1. Plot average age of a team age (`age`) versus expected goals and assists per 
 90 minutes (`xG_xA_p90`). 
@@ -556,11 +556,59 @@ p + geom_point(alpha = .5) +
   theme_bw()
 
 ```
-Faceted density plots of xG, xA by position
 
-2. Regress xGp90 and xAp90 on min to see if someone is not playing as much as 
-you might think they should play. 
-3. Cluster analysis based on EPL data: `epl_stats_2022` from R package
+6. Using the `epl_player_stats_2022` data frame from the `ISAR` package, plot 
+expected goals plus assists per 90 (`xG_xA_p90`) on the y axis and minutes 
+played (`min`) on the y. Label the players having an `xG_xA_p90` value greater
+than one.
+
+```{r}
+p <- ggplot(data = epl_player_stats_2022 |> 
+              dplyr::mutate(new_player = ifelse(xG_xA_p90 > 1,
+                                                player,
+                                                NA)),
+            aes(x = min, y = xG_xA_p90, label = new_player))
+p + geom_point(alpha = .5) + 
+  geom_smooth(method = "lm") +
+  labs(x = "Minutes", y = "Expected goals and assists per 90 minutes") +
+  geom_text_repel()
+```
+
+7. Filter the data set to players who played more than 90 minutes. Regress 
+expected goals plus assists per 90 (`xG_xA_p90`) on minutes played (`min`). Does 
+the result surprise you? 
+
+```{r}
+epl_lm <- lm(xG_xA_p90 ~ min, data = epl_player_stats_2022 |> 
+               dplyr::filter(min > 90))
+summary(epl_lm)
+```
+The insignificant slope parameter should not be a surprise given that the 
+dependent variable has been normalized based on a per 90 minute criterion. 
+
+8. Redo problems (6) and (7) using expected goals plus expected assists as the 
+dependent variable.  
+
+```{r}
+p <- ggplot(data = epl_player_stats_2022 |> 
+               dplyr::filter(min > 90) |> 
+               dplyr::mutate(xG_xA = xG + xA),
+            aes(x = min, y = xG_xA))
+p + geom_point(alpha = .5) + 
+  geom_smooth(method = "lm") +
+  labs(x = "Minutes", y = "Expected goals and assists per 90 minutes") 
+# +
+#   geom_text_repel()
+```
+```{r}
+epl_lm <- lm(xG_xA ~ min, data = epl_player_stats_2022 |> 
+               dplyr::filter(min > 90) |> 
+               dplyr::mutate(xG_xA = xG + xA))
+summary(epl_lm)
+```
+
+
+9. Cluster analysis based on EPL data: `epl_stats_2022` from R package
 
 ## Case Study
 Something related to [Transfermarkt.com](https://www.transfermarkt.com).
