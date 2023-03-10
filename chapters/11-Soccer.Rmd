@@ -35,6 +35,8 @@ library(ggrepel)
 library(ggdendro)
 library(ISAR)
 library(mixtools)
+library(factoextra)
+library(worldfootballR)
 theme_set(theme_bw())
 ```
 
@@ -309,6 +311,16 @@ Do certain positions dominate certain clusters?
 
 ### Hierarchical Clustering
 
+Hierarchical clustering methods are a commonly used class of alternatives to 
+$k$-means clustering. As the name suggests, the methodology will produce a 
+"hierarchy" amongst the observations relative to some distance measure, and the 
+results are easy to visualize. There are several competing hierarchical methods
+from which to choose, however, we will only focus on those that are agglomerative 
+in nature. That is, each observation is considered its own cluster initially and 
+are paired up in subsequent steps based on dissimilarity meausures between 
+observations/clusters. We will use functions from the `factoextra` package to 
+visualize the results of our clustering.
+
 ```{r}
 nwsl_cluster_df <- nwsl_player_stats |> 
   dplyr::mutate(player_team = paste(player, squad, sep = "_")) |> 
@@ -317,10 +329,32 @@ nwsl_cluster_df <- nwsl_player_stats |>
   na.omit()
 row.names(nwsl_cluster_df) <- nwsl_cluster_df$player_team
 hc <- hclust(dist(nwsl_cluster_df), "average")
-p <- ggdendrogram(hc, rotate = FALSE, size = 2)
+p <- ggdendrogram(hc, rotate = T, size = 2)
 p
 ```
+As you can see, it is extremely difficult to visualize the dendogram in its 
+entirety. We can, however, visualize specific pieces and try to identify 
+individuals within clusters. 
 
+```{r}
+# dend_plot <- factoextra::fviz_dend(hc)
+# dend_data <- attr(dend_plot, "dendrogram")
+# dend_cuts <- cut(dend_data, h = 8)
+# fviz_dend(dend_cuts$lower[[2]])
+```
+
+```{r}
+fit <- cutree(hc, k = 5)
+table(fit)
+```
+
+```{r}
+plot(hc)
+rect.hclust(hc, k = 5, border = "forestgreen")
+```
+```{r}
+fit
+```
 
 ### Gaussian Mixtures
 
@@ -611,10 +645,81 @@ summary(epl_lm)
 9. Cluster analysis based on EPL data: `epl_stats_2022` from R package
 
 ## Case Study
-Something related to [Transfermarkt.com](https://www.transfermarkt.com).
+Something related to [Transfermarkt.com](https://www.transfermarkt.com). We will 
+use the `worldfootballR` package to match player valuations (based on Transfermarkt)
+with their statistics from the 2021-22 season in order to identify under- and 
+over-paid players. 
 
 ## Lab
-EPL Goalkeeper study using `epl_gk_stats_2022` from R package.
+In this lab, we will investigate playing styles by goalkeepers in the English 
+Premier League. The data for the lab can be found in the `ISAR` package under
+`epl_gk_stats_2022`. The data set consists of 42 observations (goalkeepers) across 
+32 variables. We will perform a k-means clustering of the players to gain 
+insights into their shot stopping and passing styles. 
 
+1. Create a k-means clustering of goalkeepers based on the following variables: 
+post shot expected goals per shot on target (`post_shot_xG_per_shot_on_target`), 
+post shot expected goals minus goals scored per 90 minutes 
+(`post_shot_xG_minus_goals_p90`), launch completion percent 
+(`launch_completion_percent`), pass launch percentage (`pass_launch_percent`), 
+average pass length (`avg_pass_len`), 
+goal kick launch percent (`gk_launch_percent`), and defensive actions outside the
+penalty area per 90 minutes (`def_actions_out_pen_area_p90`). Set your seed at
+8675.
 
+```{r}
+set.seed(8675)
+epl_gk_kmean <- kmeans(dplyr::select(epl_gk_stats_2022, 
+                                     post_shot_xG_per_shot_on_target, 
+                                     launch_completion_percent, 
+                                     pass_launch_percent, 
+                                     avg_pass_len,
+                                     gk_launch_percent,
+                                     def_actions_out_pen_area_p90) |> 
+                         na.omit(),
+                       centers = 2)
+```
+
+```{r}
+epl_gk_kmean
+```
+2. Create a data frame showing the players, their nationality, and their cluster
+assignment. Sort the data by cluster. 
+
+```{r}
+epl_gk_stats_2022 |>dplyr::mutate(k_means = epl_gk_kmean$cluster) |> 
+  dplyr::select(player, nation, k_means) |> 
+  dplyr::arrange(k_means)
+```
+
+3. Plot the average pass length by the number of defensive actions outside the 
+penalty area per ninety minutes. Color the points by the cluster membership. 
+```{r}
+epl_cluster_df <- dplyr::mutate(epl_gk_stats_2022, 
+                                k_means = epl_gk_kmean$cluster) 
+
+p <- ggplot(data = epl_cluster_df,
+            aes(x = avg_pass_len, 
+                y = def_actions_out_pen_area_p90, 
+                col = as.factor(k_means)))
+p + geom_point() +
+  scale_color_brewer("cluster", palette = "Set1") +
+  labs(x = "Average Pass Length",
+       y = "Defensive Actions Outside the Penalty Area per 90")
+```
+4. Add simple linear regression trend lines for each cluster. What can you infer 
+based on these trend lines. 
+
+```{r}
+p <- ggplot(data = epl_cluster_df,
+            aes(x = avg_pass_len, 
+                y = def_actions_out_pen_area_p90, 
+                col = as.factor(k_means)))
+p + geom_point() +
+  scale_color_brewer("cluster", palette = "Set1") +
+  labs(x = "Average Pass Length",
+       y = "Defensive Actions Outside the Penalty Area per 90") +
+  geom_smooth(method = "lm")
+
+```
 
