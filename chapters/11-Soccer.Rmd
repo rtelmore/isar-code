@@ -332,8 +332,13 @@ row.names(nwsl_cluster_df) <- nwsl_cluster_df$player_team
 hc <- hclust(dist(nwsl_cluster_df), "average")
 ```
 
+The following figure shows that with a hierarchical clustering, we can ultimately
+assign each observation to its own cluster. Obviously, this is not useful. We have
+to cut the clustering at a certain level in order to make this a meaningful 
+methodology. 
+
 ```{r}
-p <- ggdendrogram(hc, rotate = T, size = 2)
+p <- ggdendrogram(hc, labels = F, size = 2)
 p
 ```
 

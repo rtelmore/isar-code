@@ -48,8 +48,8 @@ df_summarized <- df_sub |>
                    mean_sg_app = mean(sg_app, na.rm = TRUE),
                    mean_sg_arg = mean(sg_arg, na.rm = TRUE),
                    mean_sg_putt = mean(sg_putt, na.rm = TRUE),
-                   mean_WGR = mean(WGR_June_2022, na.rm = TRUE)) |> 
-  dplyr::mutate(top_50 = ifelse(mean_WGR <= 50, T, F)) 
+                   WGR = mean(WGR_June_2022, na.rm = TRUE)) |> 
+  dplyr::mutate(top_50 = ifelse(WGR <= 50, T, F)) 
 ```
 
 
@@ -68,7 +68,8 @@ df_SG_radarchart <- data.frame(SGOTT= c(0.4, -0.5),
                                SGAPP = c(0.4, -0.5), 
                                SGARG = c(0.4, -0.5), 
                                SGPUTT = c(0.4, -0.5)) |> 
-  bind_rows(df_summarized_top_50 |> select(-top_50))
+  dplyr::bind_rows(df_summarized_top_50 |> 
+                     dplyr::select(-top_50))
 ```
 
 ```{r}
@@ -91,22 +92,51 @@ legend("topright",
 ## Clustering
 
 ```{r}
-df_summarized <- df_summarized |> 
-  dplyr::mutate(three_tiers = ifelse(mean_WGR <= 50, "top_50",
-                                     ifelse(mean_WGR <= 100, "top_100", 
-                                            "outside_100"))) |> 
+df_clusters <- df_summarized |> 
+  dplyr::select(Player_initial_last, mean_sg_ott, mean_sg_app, mean_sg_arg,
+                mean_sg_putt) |> 
   na.omit()
 ```
 
 ```{r}
-set.seed(90283)
-cluster_strokes_gained <- kmeans(df_summarized[, c("mean_sg_ott", "mean_sg_app",
-                                                   "mean_sg_arg", "mean_sg_putt")],
-                                 centers = 3, nstart = 20)
-cluster_strokes_gained
+df_summarized <- df_summarized |> 
+  dplyr::mutate(three_tiers = ifelse(WGR <= 50, "top_50",
+                                     ifelse(WGR <= 100, "top_100", 
+                                            "outside_100")),
+                three_tiers = ifelse(is.na(three_tiers), "outside_100", 
+                                     three_tiers))
 ```
 
 ```{r}
-table(cluster_strokes_gained$cluster, df_summarized$three_tiers)
+set.seed(90283)
+cluster_strokes_gained <- kmeans(df_clusters |> dplyr::select(-Player_initial_last),
+                                 centers = 3, nstart = 20)
+cluster_strokes_gained
+```
+Join the results of the clustering with the three tiers. 
+```{r}
+df_cl_results <- df_clusters |> 
+  dplyr::mutate(clusters = cluster_strokes_gained$cluster) |> 
+  dplyr::left_join(df_summarized)
+```
+
+```{r}
+table(df_cl_results$clusters, df_cl_results$three_tiers)
+```
+
+## Exercises
+
+3. Using the summarized strokes gained data set from above, regress OWGR on 
+mean_sg_ott, mean_sg_app, mean_sg_arg, and mean_sg_putt. 
+
+```{r}
+df_reg <- lm(WGR ~ mean_sg_ott + mean_sg_app + mean_sg_arg + mean_sg_putt,
+             data = df_summarized |> na.omit())
+summary(df_reg)
+```
+```{r}
+cor(df_summarized |> 
+      dplyr::select(mean_sg_ott, mean_sg_app, mean_sg_arg, mean_sg_putt) |> 
+      na.omit())
 ```
 
