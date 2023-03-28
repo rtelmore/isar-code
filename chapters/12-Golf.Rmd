@@ -14,6 +14,7 @@ library(dplyr)
 #library(tidyr)
 library(fmsb)
 library(ISAR)
+library(factoextra)
 ```
 
 ```{r, eval = F}
@@ -122,6 +123,37 @@ df_cl_results <- df_clusters |>
 
 ```{r}
 table(df_cl_results$clusters, df_cl_results$three_tiers)
+```
+
+### Two Clusters
+
+```{r}
+set.seed(9083)
+cluster_strokes_gained_2 <- kmeans(df_clusters |>
+                                     dplyr::select(-Player_initial_last),
+                                   centers = 2, nstart = 20)
+df_cl_results <- df_clusters |> 
+  dplyr::mutate(clusters_2 = cluster_strokes_gained_2$cluster) |> 
+  dplyr::left_join(df_summarized)
+table(df_cl_results$clusters_2, df_cl_results$three_tiers)
+```
+
+```{r}
+set.seed(9083)
+cluster_strokes_gained_4 <- kmeans(df_clusters |>
+                                     dplyr::select(-Player_initial_last),
+                                   centers = 4, nstart = 20)
+df_cl_results <- df_clusters |> 
+  dplyr::mutate(clusters_4 = cluster_strokes_gained_4$cluster) |> 
+  dplyr::left_join(df_summarized)
+table(df_cl_results$clusters_4, df_cl_results$three_tiers)
+```
+
+```{r}
+factoextra::fviz_cluster(cluster_strokes_gained, 
+                         data = df_clusters |>
+                                     dplyr::select(-Player_initial_last),
+                         ggtheme = theme_bw())
 ```
 
 ## Exercises
