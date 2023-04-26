@@ -172,3 +172,55 @@ cor(df_summarized |>
       na.omit())
 ```
 
+## Simulating the Cut
+
+Suppose Rory McIlory has probabilies of recording a one, two, three, four, five,
+and six on any par three hole as 0.0001, 0.25, 0.6, 0.1, 0.04, and 0.0099,
+respectively. We write this as 
+$\pi_3^{R} = (0.0001, 0.25, 0.6, 0.1, 0.04, 0.0099)$. 
+His probability of recording a two through seven on par 4s and par 5s can be written
+as $\pi_4^{R} = (0.0005, .2, .7, .1, .09, 0.0095)$ and 
+$\pi_5^{R} = (0, 0.05, 0.35, 0.5, 0.0901, 0.0099)$. Similarly, Jordan Spieth's 
+probabiliy vectors can be written as: (something with higher variance). Given that
+the Masters tournament has four par 3 holes, ten par 4 holes, and four par 5 holes, 
+which player do you think is more likely to make the cut if the cut is likely to 
+be 146 after two rounds? Which player is more likely to have a better overall (four 
+rounds) score? Assume that holes are independent and each hole's score can be
+sampled from a multinomial distribution given the probability vectors defined 
+above. Base your results on 10000 Monte Carlo samples. 
+
+```{r}
+B <- 10000
+rory_scores <- numeric(length = B)
+for(b in 1:B){
+  threes <- sum(apply(rmultinom(8, 
+                                size = 1, 
+                                prob = c(0.0001, 0.25, 0.6, 0.1, 0.04, 
+                                         0.0099))*1:6,
+                      2, sum))
+  fours <- sum(apply(rmultinom(20, 
+                               size = 1, 
+                               prob = c(0.0005, .2, .7, .1, .09, 
+                                        0.0095))*2:7,
+                     2, sum))
+  fives <- sum(apply(rmultinom(8, 
+                               size = 1, 
+                               prob = c(0, 0.05, 0.35, 0.5, 0.0901, 
+                                        0.0099))*2:7,
+                     2, sum))
+  rory_scores[b] <- sum(threes) + sum(fours) + sum(fives)
+}
+```
+
+Estimated probability of making the cut:
+
+```{r}
+p <- sum(rory_scores <= 146)/B
+p
+```
+
+Confidence interval
+```{r}
+c(p - 1.96*sqrt(p*(1-p)/B), p + 1.96*sqrt(p*(1-p)/B))
+```
+
