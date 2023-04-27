@@ -174,14 +174,16 @@ cor(df_summarized |>
 
 ## Simulating the Cut
 
-Suppose Rory McIlory has probabilies of recording a one, two, three, four, five,
+Suppose Player X has probabilies of recording a one, two, three, four, five,
 and six on any par three hole as 0.0001, 0.25, 0.6, 0.1, 0.04, and 0.0099,
 respectively. We write this as 
 $\pi_3^{R} = (0.0001, 0.25, 0.6, 0.1, 0.04, 0.0099)$. 
 His probability of recording a two through seven on par 4s and par 5s can be written
-as $\pi_4^{R} = (0.0005, .2, .7, .1, .09, 0.0095)$ and 
-$\pi_5^{R} = (0, 0.05, 0.35, 0.5, 0.0901, 0.0099)$. Similarly, Jordan Spieth's 
-probabiliy vectors can be written as: (something with higher variance). Given that
+as $\pi_4^{R} = (0.0005, .2, .6, .1, .09, 0.0095)$ and 
+$\pi_5^{R} = (0, 0.05, 0.35, 0.5, 0.0901, 0.0099)$. Player Y is a little more 
+volatile and has a slightly higher probability of making a birdie or better, or
+a bogey or worse than Player X. His probabili vectors can be written as: 
+(something with higher variance). Given that
 the Masters tournament has four par 3 holes, ten par 4 holes, and four par 5 holes, 
 which player do you think is more likely to make the cut if the cut is likely to 
 be 146 after two rounds? Which player is more likely to have a better overall (four 
@@ -190,37 +192,65 @@ sampled from a multinomial distribution given the probability vectors defined
 above. Base your results on 10000 Monte Carlo samples. 
 
 ```{r}
+set.seed(19831)
 B <- 10000
-rory_scores <- numeric(length = B)
+x_scores <- numeric(length = B)
+x_probs <- matrix(c(0.0001, 0.25, 0.6, 0.1, 0.04, 0.0099,
+                    0.0005, .2, .6, .1, .09, 0.0095,
+                    0, 0.05, 0.35, 0.5, 0.0901, 0.0099), 
+                  nr = 3, byrow = T)
+y_scores <- numeric(length = B)
+y_probs <- matrix(c(0.0001, 0.30, 0.5, 0.14, 0.05, 0.0099,
+                    0.0005, .25, .5, .15, .09, 0.0095,
+                    0, 0.05, 0.375, 0.45, 0.1151, 0.0099), 
+                  nr = 3, byrow = T)
 for(b in 1:B){
-  threes <- sum(apply(rmultinom(8, 
-                                size = 1, 
-                                prob = c(0.0001, 0.25, 0.6, 0.1, 0.04, 
-                                         0.0099))*1:6,
-                      2, sum))
-  fours <- sum(apply(rmultinom(20, 
-                               size = 1, 
-                               prob = c(0.0005, .2, .7, .1, .09, 
-                                        0.0095))*2:7,
-                     2, sum))
-  fives <- sum(apply(rmultinom(8, 
-                               size = 1, 
-                               prob = c(0, 0.05, 0.35, 0.5, 0.0901, 
-                                        0.0099))*2:7,
-                     2, sum))
-  rory_scores[b] <- sum(threes) + sum(fours) + sum(fives)
+  threes <- c(sum(rmultinom(8, size = 1, prob = x_probs[1, ])*1:6),
+              sum(rmultinom(8, size = 1, prob = y_probs[1, ])*1:6))
+  fours <- c(sum(rmultinom(20, size = 1, prob = x_probs[2, ])*2:7),
+             sum(rmultinom(20, size = 1, prob = y_probs[2, ])*2:7))
+  fives <- c(sum(rmultinom(8, size = 1, prob = x_probs[3, ])*2:7),
+             sum(rmultinom(8, size = 1, prob = y_probs[3, ])*2:7))
+  x_scores[b] <- sum(threes[1]) + sum(fours[1]) + sum(fives[1])
+  y_scores[b] <- sum(threes[2]) + sum(fours[2]) + sum(fives[2])
 }
 ```
 
 Estimated probability of making the cut:
 
 ```{r}
-p <- sum(rory_scores <= 146)/B
+p <- sum(x_scores <= 146)/B
 p
 ```
 
+```{r}
+p <- sum(y_scores <= 146)/B
+p
+```
 Confidence interval
 ```{r}
 c(p - 1.96*sqrt(p*(1-p)/B), p + 1.96*sqrt(p*(1-p)/B))
+```
+
+Compute density (ggplot) of their two-round scores.
+
+```{r}
+df <- data.frame(name = rep(c("Player X", "Player Y"), each = B),
+                 scores = c(x_scores, y_scores))
+p <- ggplot(data = df, aes(x = scores, fill = name))
+p + geom_density(alpha = .5) +
+  scale_fill_grey() +
+  theme_bw()
+```
+
+Suppose a score of +7 will give you the lead after two rounds. Which player is 
+more likely to be in the lead? 
+
+```{r}
+sum(x_scores >= 151)/B
+```
+
+```{r}
+sum(y_scores >= 151)/B
 ```
 
