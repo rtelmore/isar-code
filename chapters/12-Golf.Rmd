@@ -172,15 +172,77 @@ cor(df_summarized |>
       na.omit())
 ```
 
+For Problems 4 - 8 we will use the 2019 Masters dataset given in the ISAR R
+package. 
+
+4. Compute histogram plots of the scores and facet by round. 
+
+```{r}
+df <- masters |> 
+  tidyr::pivot_longer(cols = dplyr::starts_with("round")) 
+
+p <- ggplot2::ggplot(data = df,
+                     aes(x = value))
+p + ggplot2::geom_histogram() +
+  ggplot2::facet_wrap(~ name) +
+  ggplot2::theme_bw()
+```
+
+5. Add the averagescore per round to the plots above as a reference. We will use
+this average per round in the next question.
+
+```{r}
+df_mean <- df |> 
+  dplyr::group_by(name) |> 
+  dplyr::summarize(value = mean(value, na.rm = T))
+p + ggplot2::geom_histogram() +
+  ggplot2::facet_wrap(~ name) +
+  ggplot2::geom_vline(data = df_mean, aes(xintercept = value)) + 
+  ggplot2::theme_bw()
+```
+
+
+6. Calculate strokes gained for each player-round. Note that you will have to 
+compute the average score per round and compare each player's score relative to 
+that average.
+
+```{r}
+df_sg <- dplyr::left_join(df, df_mean, by = "name") |> 
+  dplyr::mutate(strokes_gained = value.y - value.x)
+```
+
+7. Repeat question 4 using strokes gained.
+
+```{r}
+p <- ggplot2::ggplot(data = df_sg,
+                     aes(x = strokes_gained))
+p + ggplot2::geom_histogram() +
+  ggplot2::facet_wrap(~ name) +
+  ggplot2::theme_bw()
+```
+
+8. Plot strokes gained (y) versus player score (x) by round. Do you find the 
+resulting plot surprising? Why or why not? 
+
+```{r}
+p <- ggplot2::ggplot(data = df_sg,
+                     aes(x = value.x, y = strokes_gained))
+p + ggplot2::geom_point() + 
+  ggplot2::facet_wrap(~ name) +
+  ggplot2::theme_bw()
+```
+
+Create two histograms from this data – one for players who made the cut and one for those who didn’t. What can you infer about the distributions within the histograms and between them? 
+
 ## Simulating the Cut
 
 Suppose Player X has probabilies of recording a one, two, three, four, five,
 and six on any par three hole as 0.0001, 0.25, 0.6, 0.1, 0.04, and 0.0099,
 respectively. We write this as 
-$\pi_3^{R} = (0.0001, 0.25, 0.6, 0.1, 0.04, 0.0099)$. 
+$$\pi_3^{X} = (0.0001, 0.25, 0.6, 0.1, 0.04, 0.0099)$$. 
 His probability of recording a two through seven on par 4s and par 5s can be written
-as $\pi_4^{R} = (0.0005, .2, .6, .1, .09, 0.0095)$ and 
-$\pi_5^{R} = (0, 0.05, 0.35, 0.5, 0.0901, 0.0099)$. Player Y is a little more 
+as $$\pi_4^{X} = (0.0005, .2, .6, .1, .09, 0.0095)$$ and 
+$$\pi_5^{X} = (0, 0.05, 0.35, 0.5, 0.0901, 0.0099)$$. Player Y is a little more 
 volatile and has a slightly higher probability of making a birdie or better, or
 a bogey or worse than Player X. His probabili vectors can be written as: 
 (something with higher variance). Given that
@@ -243,14 +305,14 @@ p + geom_density(alpha = .5) +
   theme_bw()
 ```
 
-Suppose a score of +7 will give you the lead after two rounds. Which player is 
+Suppose a score of -7 will give you the lead after two rounds. Which player is 
 more likely to be in the lead? 
 
 ```{r}
-sum(x_scores >= 151)/B
+sum(x_scores < 137)/B
 ```
 
 ```{r}
-sum(y_scores >= 151)/B
+sum(y_scores < 137)/B
 ```
 

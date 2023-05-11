@@ -144,18 +144,18 @@ you solve the most common data manipulation challenges:" `mutate()`, `select()`,
 `filter()`, `summarize()`, and `arrange`. I tend to think of dplyr as a SQL-like
 syntax for R. For reasons that will hopefully become obvious as the quarter 
 progresses, dplyr (and other packages) rely heavily on the "pipe" operator that 
-was introduced in the [magrittr](http://magrittr.tidyverse.org) package and, in
-fact, dplyr "imports" the magrittr package upon loading dyply. The best way to
+was first introduced in the [magrittr](http://magrittr.tidyverse.org) package 
+and later in in base R. The best way to
 learn dplyr is to do dplyr. Here's an example.
 
 ```{r bat-hr}
-df <- tibble(Batting) %>%
-  filter(., teamID %in% c("COL", "MIA", "FLO")) %>%
-  mutate(., 
-         teamID = as.character(teamID),
-         teamID = if_else(teamID == "FLO", "MIA", teamID)) %>%
-  group_by(., teamID, yearID) %>%
-  summarize(., team_hr = sum(HR))
+df <- tibble(Batting) |>
+  filter(teamID %in% c("COL", "MIA", "FLO")) |>
+  mutate(teamID = as.character(teamID),
+         teamID = ifelse(teamID == "FLO", "MIA", teamID)) |>
+  group_by(teamID, yearID) |>
+  summarize(team_hr = sum(HR)) |> 
+  ungroup()
 ```
 
 # New R Markdown File
@@ -198,18 +198,16 @@ stand-alone chunk by using the three back ticks method, e.g.
 
 ````
 ```{r, eval = FALSE}`r ''`
-p <- ggplot(df,
-            aes(x = yearID, y = team_hr, col = teamID))
+p <- ggplot(df, aes(x = yearID, y = team_hr, col = teamID))
 
 p + geom_point() +
   geom_line() +
   facet_grid(~ teamID) +
   scale_color_brewer(palette = "Set1") +
-  labs(
-    x = "year",
-    y = "home runs",
-    title = "Home Runs by Year",
-    subtitle = "something"
+  labs(x = "year",
+       y = "home runs",
+       title = "Home Runs by Year",
+       subtitle = "something"
   ) +
   guides(col = FALSE) +
   theme_bw()
@@ -220,20 +218,17 @@ The only R code in that previous text chunk is the stuff contained on the lines
 between the `` ``` ``, or the following text.
 
 ```{r, eval = FALSE}
-p <- ggplot(df,
-            aes(x = yearID, y = team_hr, col = teamID))
+p <- ggplot(df, aes(x = yearID, y = team_hr))
 
 p + geom_point() +
   geom_line() +
   facet_grid(~ teamID) +
-  scale_color_brewer(palette = "Set1") +
-  labs(
-    x = "year",
-    y = "home runs",
-    title = "Home Runs by Year",
-    subtitle = "COL vs MIA"
+  labs(x = "Year",
+       y = "Home Runs",
+       title = "Home Runs by Year",
+       subtitle = "Colorado Rockies and Florida Marlins"
   ) +
-  guides(col = FALSE) +
+  guides(col = "none") +
   theme_bw()
 ```
 
@@ -242,7 +237,7 @@ I usually organize my `.Rmd` documents in the following way:
 1. YAML heading
 2. I will put an R code chunk at the top of the document with the packages that 
 I refer to as the `lib` for library. 
-3. After 2., I import any necessary data and call that code chunk `data`. 
+3. After 2I import any necessary data and call that code chunk `data`. 
 4. I then weave text and R code chunks throughout the rest of the document.
 
 ## Lahman Data
@@ -273,13 +268,13 @@ Figure \ref{fig:fig-team-hrs} shows the home runs per year for each of the
 Colorado Rockies and the Florida/Miami Marlins. 
 
 ```{r data, include = F}
-df <- tibble(Batting) %>%
-  filter(., teamID %in% c("COL", "MIA", "FLO")) %>%
-  mutate(., 
-         teamID = as.character(teamID),
-         teamID = if_else(teamID == "FLO", "MIA", teamID)) %>%
-  group_by(., teamID, yearID) %>%
-  summarize(., team_hr = sum(HR))
+df <- tibble(Batting) |>
+  filter(teamID %in% c("COL", "MIA", "FLO")) |>
+  mutate(teamID = as.character(teamID),
+                teamID = ifelse(teamID == "FLO", "MIA", teamID)) |>
+  group_by(teamID, yearID) |>
+  summarize(team_hr = sum(HR)) |> 
+  ungroup()
 ```
 
 
@@ -290,20 +285,17 @@ to view the figure, you __must__ add layers to the plot. The first layer that I
 add is the `geom_point()` layer, next is `geom_line()`, and so on. 
 
 ```{r fig, echo = FALSE, fig.width = 6.5, fig.cap='\\label{fig:fig-team-hrs} Home runs for each team over the years.'}
-p <- ggplot(df,
-            aes(x = yearID, y = team_hr, col = teamID))
+p <- ggplot(df, aes(x = yearID, y = team_hr))
 
 p + geom_point() +
   geom_line() +
   facet_grid(~ teamID) +
-  scale_color_brewer(palette = "Set1") +
-  labs(
-    x = "year",
-    y = "home runs",
-    title = "Home Runs by Year",
-    subtitle = "COL & MIA"
+  labs(x = "year",
+                y = "home runs",
+                title = "Home Runs by Year",
+                subtitle = "COL and MIA"
   ) +
-  guides(col = FALSE) +
+  guides(col = "none") +
   theme_bw()
 ```
 
@@ -356,8 +348,8 @@ new data frame?
 ### Answer 1
 
 ```{r}
-new_df <- pitch_df %>%
-  filter(., teamID %in% c("CIN", "PHI"))
+new_df <- pitch_df |>
+  filter(teamID %in% c("CIN", "PHI"))
 nrow(new_df)
 ```
 
@@ -370,19 +362,19 @@ through 2018 colored by teamID.
 ### Answer 2
 
 ```{r}
-p <- new_df %>%
-  filter(teamID %in% c("CIN", "PHI")) %>%
-  group_by(yearID, teamID) %>%
-  summarize(total_er = sum(ER)) %>%
-  filter(yearID >= 1970) %>%
-  ggplot(., aes(yearID, total_er, col = teamID))
+new_df <- new_df |>
+  filter(teamID %in% c("CIN", "PHI")) |>
+  group_by(yearID, teamID) |>
+  summarize(total_er = sum(ER)) |>
+  filter(yearID >= 1970)
+p <- ggplot(new_df, aes(yearID, total_er, linetype = teamID))
 p + geom_point() +
   geom_line() +
   scale_color_brewer(palette = "Set1") +
-  labs(
-    x = "year",
-    y = "total ER"
-  )
+  labs(x = "year",
+                y = "total ER"
+  ) +
+  theme_bw()
 ```
 
 ### Question 3
@@ -393,7 +385,7 @@ the Colorado Rockies. Call this new data frame `col_df`.
 ### Answer 3
 
 ```{r}
-col_df <- tbl_df(Batting) %>%
+col_df <- tibble(Batting) |>
   filter(teamID == "COL")
 ```
 
@@ -413,11 +405,11 @@ function at the end of your definition.
 ### Answer 4
 
 ```{r}
-col_df <- col_df %>%
-  filter(teamID == "COL") %>%
+col_df <- col_df |>
+  filter(teamID == "COL") |>
   mutate(X1B = H - X2B - X3B - HR, #singles
          TB = X1B + 2*X2B + 3*X3B + 4*HR,
-         SLG = TB/AB) %>%
+         SLG = TB/AB) |>
   na.omit()
 ```
 
@@ -428,9 +420,9 @@ Plot the average SLG per year for the Rockies from 1993 - 2018.
 ### Answer 5
 
 ```{r}
-col_df_2 <- col_df %>%
-  group_by(yearID, teamID) %>%
-  summarize(avg_slg = mean(SLG)) %>%
+col_df_2 <- col_df |>
+  group_by(yearID, teamID) |>
+  summarize(avg_slg = mean(SLG)) |>
   filter(yearID >= 1993) 
 
 p <- ggplot(data = col_df_2,
@@ -441,7 +433,8 @@ p + geom_point() +
   labs(
     x = "year",
     y = "average SLG"
-  )
+  ) +
+  theme_bw()
 ```
 
 Alternatively, someone wrote in saying that this solution looks a bit wacky in
@@ -452,9 +445,9 @@ hitters [^1]. If you want to see the team SLG for the Rockies, you could do the
 following. 
 
 ```{r}
-col_df_3 <- col_df %>%
-  group_by(yearID, teamID) %>%
-  summarize(team_slg = sum(TB)/sum(AB)) %>%
+col_df_3 <- col_df |>
+  group_by(yearID, teamID) |>
+  summarize(team_slg = sum(TB)/sum(AB)) |>
   filter(yearID >= 1993) 
 
 p <- ggplot(data = col_df_3,
@@ -465,7 +458,8 @@ p + geom_point() +
   labs(
     x = "year",
     y = "team SLG"
-  )
+  ) +
+  theme_bw()
 ```
 
 

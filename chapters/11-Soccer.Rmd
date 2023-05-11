@@ -17,7 +17,7 @@ knitr::opts_chunk$set(fig.align="center",
 ```
 
 ```{r, eval=F, include = F, message = F}
-remotes::install_github("rtelmore/ISAR")
+install.packages("ISAR")
 ```
 
 ```{r libs, include=T, message = F, warning = F}
@@ -28,9 +28,6 @@ library(rvest)
 library(janitor)
 library(scales)
 library(readr)
-library(nhlapi)
-library(purrr)
-library(sportyR)
 library(ggrepel)
 library(ggdendro)
 library(ISAR)
@@ -94,13 +91,13 @@ under the `nwsl_player_stats` object.
 
 ```{r, eval = F}
 nwsl_player_stats <- read.csv("../data/nwsl-players.csv", header = T) |> 
-  janitor::clean_names() |> 
-  dplyr::select(c(2:6, 8:10, 28:32)) |> 
-  dplyr::rename(xGp90 = x_g_1,
-                xAp90 = x_ag_1,
-                xGxAp90 = x_g_x_ag,
-                npxGp90 = npx_g_1,
-                npxGxAp90 = npx_g_x_ag_1)
+  clean_names() |> 
+  select(c(2:6, 8:10, 28:32)) |> 
+  rename(xGp90 = x_g_1,
+         xAp90 = x_ag_1,
+         xGxAp90 = x_g_x_ag,
+         npxGp90 = npx_g_1,
+         npxGxAp90 = npx_g_x_ag_1)
 saveRDS(nwsl_player_stats, "../data/nwsl_player_stats.rds")
 ```
 
@@ -114,7 +111,7 @@ players as the goalkeepers are not likely to score or assist on a goal.
 
 ```{r}
 p <- ggplot(data = nwsl_player_stats |> 
-              dplyr::filter(pos != "GK"),
+              filter(pos != "GK"),
             aes(x = age, y = xGp90))
 p + geom_point(alpha = .5) +
   labs(x = "age", y = "expected goals (xG)") +
@@ -129,9 +126,9 @@ than 20 years of age with a positive xG value, or have an xG value greater than
 
 ```{r}
 p <- ggplot(data = nwsl_player_stats |> 
-              dplyr::filter(pos != "GK") |> 
-              dplyr::mutate(new_player = ifelse((age < 20 & xGp90 > 0) | xGp90 > 0.6,
-                            player, "")),
+              filter(pos != "GK") |> 
+              mutate(new_player = ifelse((age < 20 & xGp90 > 0) | xGp90 > 0.6,
+                                         player, "")),
             aes(x = age, y = xGp90, label = new_player))
 p + geom_point(alpha = .5) +
   labs(x = "Age", y = "Expected goals (xG)") +
@@ -168,14 +165,14 @@ played (xGxAp90). We are going to consider three clusters initially.
 
 ```{r}
 nwsl_cluster_df <- nwsl_player_stats |> 
-  dplyr::mutate(player_team = paste(player, squad, sep = "_")) |> 
-  dplyr::select(player, squad, player_team, pos, age, min, starts, xGp90, xAp90, 
-                xGxAp90, npxGp90, npxGxAp90) |> 
-  dplyr::filter(xGxAp90 < 1.5, pos != "GK") |> 
+  mutate(player_team = paste(player, squad, sep = "_")) |> 
+  select(player, squad, player_team, pos, age, min, starts, xGp90, xAp90, 
+         xGxAp90, npxGp90, npxGxAp90) |> 
+  filter(xGxAp90 < 1.5, pos != "GK") |> 
   na.omit()
 
 set.seed(9019)
-km <- kmeans(dplyr::select(nwsl_cluster_df, age, min, xGp90, xAp90) |> 
+km <- kmeans(select(nwsl_cluster_df, age, min, xGp90, xAp90) |> 
                na.omit(),
              centers = 3)
 ```
@@ -184,12 +181,12 @@ How can we visualize these clusters? Let's plot age versus expected goals and
 assists, and color these points by their clusters. 
 
 ```{r}
-nwsl_cluster_df <- dplyr::mutate(nwsl_cluster_df, k_means = km$cluster)
+nwsl_cluster_df <- mutate(nwsl_cluster_df, k_means = km$cluster)
 
 p <- ggplot(data = nwsl_cluster_df,
             aes(x = age, y = min, col = as.factor(k_means)))
 p + geom_point() +
-  scale_color_brewer("cluster", palette = "Dark2") +
+  scale_color_grey("cluster") +
   labs(x = "Age of Player",
        y = "Minutes Played")
 ```
@@ -222,11 +219,11 @@ by per ninety minutes played.
 
 ```{r}
 set.seed(9019)
-km <- kmeans(dplyr::select(nwsl_cluster_df, age, xGp90, xAp90) |> 
+km <- kmeans(select(nwsl_cluster_df, age, xGp90, xAp90) |> 
                na.omit(),
              centers = 3)
 
-nwsl_cluster_df <- dplyr::mutate(nwsl_cluster_df, clusters = km$cluster)
+nwsl_cluster_df <- mutate(nwsl_cluster_df, clusters = km$cluster)
 ```
 
 ```{r}
@@ -260,11 +257,11 @@ individual variables, `xGp90` and `xAp90`.
 
 ```{r}
 set.seed(9019)
-km <- kmeans(dplyr::select(nwsl_cluster_df, xGp90, xAp90) |> 
+km <- kmeans(select(nwsl_cluster_df, xGp90, xAp90) |> 
                na.omit(),
              centers = 3)
 
-nwsl_cluster_df <- dplyr::mutate(nwsl_cluster_df, clusters = km$cluster)
+nwsl_cluster_df <- mutate(nwsl_cluster_df, clusters = km$cluster)
 ```
 
 
@@ -285,7 +282,7 @@ positions: defender (D), midfielder (M), and forward (F).
 
 ```{r}
 p <- ggplot(data = nwsl_cluster_df |> 
-              dplyr::mutate(short_pos = substr(pos, 1, 1)),
+              mutate(short_pos = substr(pos, 1, 1)),
             aes(x = xAp90, y = xGp90, shape = short_pos, col = as.factor(clusters)))
 p + geom_point(alpha = .75) +
   scale_color_brewer("cluster", palette = "Dark2") +
@@ -297,7 +294,7 @@ p + geom_point(alpha = .75) +
 
 ```{r}
 p <- ggplot(data = nwsl_cluster_df |> 
-              dplyr::mutate(short_pos = substr(pos, 1, 1)),
+              mutate(short_pos = substr(pos, 1, 1)),
             aes(x = xAp90, y = xGp90, col = short_pos, shape = as.factor(clusters)))
 p + geom_point(alpha = .75) +
   scale_color_brewer("position", palette = "Dark2") +
@@ -323,10 +320,10 @@ single, average, median, etc. linkage. The default is to use a centroid linkage.
 
 ```{r}
 nwsl_cluster_df <- nwsl_player_stats |> 
-  dplyr::mutate(player_team = paste(player, squad, sep = "_")) |> 
-  dplyr::select(player, squad, player_team, age, starts, xGp90, xAp90, xGxAp90, 
+  mutate(player_team = paste(player, squad, sep = "_")) |> 
+  select(player, squad, player_team, age, starts, xGp90, xAp90, xGxAp90, 
                 npxGp90, npxGxAp90) |> 
-  dplyr::filter(xAp90 < 2) |> 
+  filter(xAp90 < 2) |> 
   na.omit()
 row.names(nwsl_cluster_df) <- nwsl_cluster_df$player_team
 hc <- hclust(dist(nwsl_cluster_df), "average")
@@ -355,7 +352,7 @@ table(clusters)
 Do we see any patters in the data with respect to clusters? 
 ```{r}
 nwsl_cluster_df <- nwsl_cluster_df |> 
-  dplyr::mutate(clusters = clusters)
+  mutate(clusters = clusters)
 ```
 
 ```{r}
@@ -414,7 +411,7 @@ $\boldsymbol{\mu}_2 = c(30, 0.5)^\prime$, $\pi_1 = 0.15$, and $\pi_2 = 0.85$.
 ```{r}
 set.seed(109823)
 nwsl_mix_df <- nwsl_cluster_df |> 
-  dplyr::filter(xGxAp90 < 2)
+  filter(xGxAp90 < 2)
 mix_model <- mvnormalmixEM(nwsl_mix_df[, c("age", "xGxAp90")], 
                            arbvar = FALSE,
                            mu = list(c(21, .1), c(30, .5)),
@@ -459,7 +456,7 @@ black triangles in the following figure.
 
 ```{r}
 nwsl_mix_df <- nwsl_mix_df |> 
-  dplyr::mutate(pp = mix_model$posterior[, 1],
+  mutate(pp = mix_model$posterior[, 1],
                 class = ifelse(pp <= .5, "one", "two"))
 
 ```
@@ -558,7 +555,7 @@ p + geom_point(alpha = .5) +
 
 ```{r}
 p <- ggplot(data = epl_team_stats |> 
-              dplyr::mutate(team_season = ifelse(xG_xA_p90 > 3.5,
+              mutate(team_season = ifelse(xG_xA_p90 > 3.5,
                                                  paste(squad, season, sep = " "),
                                                  NA)),
             aes(x = age, y = xG_xA_p90, label = team_season))
@@ -574,7 +571,7 @@ plot as well.
 
 ```{r}
 p <- ggplot(data = epl_team_stats |> 
-              dplyr::filter(squad != "Manchester City"),
+              filter(squad != "Manchester City"),
             aes(x = age, y = xG_xA_p90))
 p + geom_point(alpha = .5) +
   labs(x = "Age", y = "Expected goals and assists per 90 minutes") +
@@ -589,7 +586,7 @@ by season.
 
 ```{r}
 p <- ggplot(data = epl_team_stats |> 
-              dplyr::filter(season != "2017-18"),
+              filter(season != "2017-18"),
             aes(x = age, y = xG_xA_p90))
 p + geom_point(alpha = .5) +
   labs(x = "Age", y = "Expected goals and assists per 90 minutes") +
@@ -599,7 +596,7 @@ p + geom_point(alpha = .5) +
 ```
 ```{r}
 p <- ggplot(data = epl_team_stats |> 
-              dplyr::filter(season != "2017-18"),
+              filter(season != "2017-18"),
             aes(x = age, y = xG_xA_p90))
 p + geom_point(alpha = .5) +
   labs(x = "Age", y = "Expected goals and assists per 90 minutes") +
@@ -616,7 +613,7 @@ than one.
 
 ```{r}
 p <- ggplot(data = epl_player_stats_2022 |> 
-              dplyr::mutate(new_player = ifelse(xG_xA_p90 > 1,
+              mutate(new_player = ifelse(xG_xA_p90 > 1,
                                                 player,
                                                 NA)),
             aes(x = min, y = xG_xA_p90, label = new_player))
@@ -632,7 +629,7 @@ the result surprise you?
 
 ```{r}
 epl_lm <- lm(xG_xA_p90 ~ min, data = epl_player_stats_2022 |> 
-               dplyr::filter(min > 90))
+               filter(min > 90))
 summary(epl_lm)
 ```
 The insignificant slope parameter should not be a surprise given that the 
@@ -643,8 +640,8 @@ dependent variable.
 
 ```{r}
 p <- ggplot(data = epl_player_stats_2022 |> 
-               dplyr::filter(min > 90) |> 
-               dplyr::mutate(xG_xA = xG + xA),
+               filter(min > 90) |> 
+               mutate(xG_xA = xG + xA),
             aes(x = min, y = xG_xA))
 p + geom_point(alpha = .5) + 
   geom_smooth(method = "lm") +
@@ -654,8 +651,8 @@ p + geom_point(alpha = .5) +
 ```
 ```{r}
 epl_lm <- lm(xG_xA ~ min, data = epl_player_stats_2022 |> 
-               dplyr::filter(min > 90) |> 
-               dplyr::mutate(xG_xA = xG + xA))
+               filter(min > 90) |> 
+               mutate(xG_xA = xG + xA))
 summary(epl_lm)
 ```
 
@@ -676,7 +673,7 @@ epl_valuations <- tm_player_market_values(country_name = "England",
 
 Join with our `epl_player_stats_2022` data from 
 ```{r, eval = F}
-epl_stats_val <- dplyr::left_join(epl_player_stats_2022, epl_valuations,
+epl_stats_val <- left_join(epl_player_stats_2022, epl_valuations,
                                   by = c("player" = "player_name"))
 ```
 
@@ -700,7 +697,7 @@ penalty area per 90 minutes (`def_actions_out_pen_area_p90`). Set your seed at
 
 ```{r}
 set.seed(8675)
-epl_gk_kmean <- kmeans(dplyr::select(epl_gk_stats_2022, 
+epl_gk_kmean <- kmeans(select(epl_gk_stats_2022, 
                                      post_shot_xG_per_shot_on_target, 
                                      launch_completion_percent, 
                                      pass_launch_percent, 
@@ -718,15 +715,15 @@ epl_gk_kmean
 assignment. Sort the data by cluster. 
 
 ```{r}
-epl_gk_stats_2022 |>dplyr::mutate(k_means = epl_gk_kmean$cluster) |> 
-  dplyr::select(player, nation, k_means) |> 
-  dplyr::arrange(k_means)
+epl_gk_stats_2022 |>mutate(k_means = epl_gk_kmean$cluster) |> 
+  select(player, nation, k_means) |> 
+  arrange(k_means)
 ```
 
 3. Plot the average pass length by the number of defensive actions outside the 
 penalty area per ninety minutes. Color the points by the cluster membership. 
 ```{r}
-epl_cluster_df <- dplyr::mutate(epl_gk_stats_2022, 
+epl_cluster_df <- mutate(epl_gk_stats_2022, 
                                 k_means = epl_gk_kmean$cluster) 
 
 p <- ggplot(data = epl_cluster_df,
