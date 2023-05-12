@@ -114,7 +114,7 @@ p <- ggplot(data = nwsl_player_stats |>
               filter(pos != "GK"),
             aes(x = age, y = xGp90))
 p + geom_point(alpha = .5) +
-  labs(x = "age", y = "expected goals (xG)") +
+  labs(x = "Age", y = "Expected Goals (xG)") +
   theme_bw()
 ```
 One thing that we might want to do in plotting sports data is to identify the 
@@ -165,13 +165,16 @@ played (xGxAp90). We are going to consider three clusters initially.
 
 ```{r}
 nwsl_cluster_df <- nwsl_player_stats |> 
-  mutate(player_team = paste(player, squad, sep = "_")) |> 
-  select(player, squad, player_team, pos, age, min, starts, xGp90, xAp90, 
+  select(player, squad, pos, age, min, starts, xGp90, xAp90, 
          xGxAp90, npxGp90, npxGxAp90) |> 
   filter(xGxAp90 < 1.5, pos != "GK") |> 
   na.omit()
+  # mutate(player_team = paste(player, squad, sep = "_")) |> 
+  # select(player, squad, player_team, pos, age, min, starts, xGp90, xAp90, 
+  #        xGxAp90, npxGp90, npxGxAp90) |> 
 
 set.seed(9019)
+
 km <- kmeans(select(nwsl_cluster_df, age, min, xGp90, xAp90) |> 
                na.omit(),
              centers = 3)
@@ -184,11 +187,17 @@ assists, and color these points by their clusters.
 nwsl_cluster_df <- mutate(nwsl_cluster_df, k_means = km$cluster)
 
 p <- ggplot(data = nwsl_cluster_df,
-            aes(x = age, y = min, col = as.factor(k_means)))
+            aes(x = age, 
+                y = min, 
+                pch = as.factor(k_means), 
+                col = as.factor(k_means)))
 p + geom_point() +
   scale_color_grey("cluster") +
   labs(x = "Age of Player",
-       y = "Minutes Played")
+       y = "Minutes Played") +
+  guides(col = "none",
+         pch = guide_legend(title = "cluster"))
+
 ```
 
 What stands out amongst this clustering of points? Clearly the clusters are 
@@ -202,11 +211,16 @@ versus expected goals and assists?
 
 ```{r}
 p <- ggplot(data = nwsl_cluster_df,
-            aes(x = age, y = xGxAp90, col = as.factor(k_means)))
+            aes(x = age, y = xGxAp90,  
+                pch = as.factor(k_means), 
+                col = as.factor(k_means)))
 p + geom_point() +
-  scale_color_brewer("cluster", palette = "Dark2") +
+  scale_color_grey("cluster") +
   labs(x = "Age of Player",
-       y = "Expected Goals and Assists per 90")
+       y = "Expected Goals and Assists per 90") +
+  guides(col = "none",
+         pch = guide_legend(title = "cluster"))
+
   
 
 ```
@@ -223,16 +237,21 @@ km <- kmeans(select(nwsl_cluster_df, age, xGp90, xAp90) |>
                na.omit(),
              centers = 3)
 
-nwsl_cluster_df <- mutate(nwsl_cluster_df, clusters = km$cluster)
+nwsl_cluster_df <- mutate(nwsl_cluster_df, clusters_two = km$cluster)
 ```
 
 ```{r}
 p <- ggplot(data = nwsl_cluster_df,
-            aes(x = age, y = xGp90, col = as.factor(clusters)))
+            aes(x = age, y = xGp90, 
+                col = as.factor(clusters_two),
+                pch = as.factor(clusters_two)))
 p + geom_point() +
-  scale_color_brewer("cluster", palette = "Dark2") +
+  scale_color_grey("cluster") +
     labs(x = "Age of Player",
-       y = "Expected Goals per 90")
+       y = "Expected Goals per 90") +
+  guides(col = "none",
+         pch = guide_legend(title = "cluster"))
+
 
 ```
 
@@ -241,12 +260,15 @@ As you might imagine, the clustering is now dominated by the age variable.
 
 ```{r}
 p <- ggplot(data = nwsl_cluster_df,
-            aes(x = age, y = xAp90, col = as.factor(clusters)))
+            aes(x = age, y = xAp90, 
+                col = as.factor(clusters_two),
+                pch = as.factor(clusters_two)))
 p + geom_point() +
-  scale_color_brewer("cluster", palette = "Dark2") +
-    labs(x = "Age of Player",
-       y = "Expected Assists per 90")
-
+  scale_color_grey("cluster") +
+  labs(x = "Age of Player",
+       y = "Expected Assists per 90") +
+  guides(col = "none",
+         pch = guide_legend(title = "cluster"))
 ```
 
 It's obvious that by including `age` and `minutes` seems to dominate
@@ -261,17 +283,22 @@ km <- kmeans(select(nwsl_cluster_df, xGp90, xAp90) |>
                na.omit(),
              centers = 3)
 
-nwsl_cluster_df <- mutate(nwsl_cluster_df, clusters = km$cluster)
+nwsl_cluster_df <- mutate(nwsl_cluster_df, clusters_three = km$cluster)
 ```
 
 
 ```{r}
 p <- ggplot(data = nwsl_cluster_df,
-            aes(x = xAp90, y = xGp90, col = as.factor(clusters)))
+            aes(x = xAp90, y = xGp90, 
+                col = as.factor(clusters_three),
+                pch = as.factor(clusters_three)))
 p + geom_point() +
-  scale_color_brewer("cluster", palette = "Dark2") +
+  scale_color_grey("cluster") +
     labs(x = "Expected Assists per 90",
-       y = "Expected Goals per 90")
+       y = "Expected Goals per 90") +
+  guides(col = "none",
+         pch = guide_legend(title = "cluster"))
+
 
 ```
 
@@ -283,22 +310,12 @@ positions: defender (D), midfielder (M), and forward (F).
 ```{r}
 p <- ggplot(data = nwsl_cluster_df |> 
               mutate(short_pos = substr(pos, 1, 1)),
-            aes(x = xAp90, y = xGp90, shape = short_pos, col = as.factor(clusters)))
+            aes(x = xAp90, y = xGp90, 
+                pch = short_pos, 
+                col = as.factor(clusters_three)))
 p + geom_point(alpha = .75) +
-  scale_color_brewer("cluster", palette = "Dark2") +
-  labs(shape = "position",
-       x = "Expected Assists per 90",
-       y = "Expected Goals per 90")
-
-```
-
-```{r}
-p <- ggplot(data = nwsl_cluster_df |> 
-              mutate(short_pos = substr(pos, 1, 1)),
-            aes(x = xAp90, y = xGp90, col = short_pos, shape = as.factor(clusters)))
-p + geom_point(alpha = .75) +
-  scale_color_brewer("position", palette = "Dark2") +
-  labs(shape = "cluster",
+  scale_color_grey("cluster") +
+  labs(pch = "position",
        x = "Expected Assists per 90",
        y = "Expected Goals per 90")
 
@@ -319,14 +336,11 @@ observations/clusters. There are several methods to perform the groups, e.g.
 single, average, median, etc. linkage. The default is to use a centroid linkage.
 
 ```{r}
-nwsl_cluster_df <- nwsl_player_stats |> 
-  mutate(player_team = paste(player, squad, sep = "_")) |> 
-  select(player, squad, player_team, age, starts, xGp90, xAp90, xGxAp90, 
-                npxGp90, npxGxAp90) |> 
-  filter(xAp90 < 2) |> 
-  na.omit()
-row.names(nwsl_cluster_df) <- nwsl_cluster_df$player_team
-hc <- hclust(dist(nwsl_cluster_df), "average")
+nwsl_hclust_df <- nwsl_cluster_df |> 
+  select(player, squad, age, starts, xGp90, xAp90, xGxAp90, 
+                npxGp90, npxGxAp90) 
+#row.names(nwsl_cluster_df) <- nwsl_cluster_df$player_team
+hc <- hclust(dist(nwsl_hclust_df), "average")
 ```
 
 The following figure shows that with a hierarchical clustering, we can ultimately
@@ -351,18 +365,22 @@ table(clusters)
 
 Do we see any patters in the data with respect to clusters? 
 ```{r}
-nwsl_cluster_df <- nwsl_cluster_df |> 
+nwsl_hclust_df <- nwsl_hclust_df |> 
   mutate(clusters = clusters)
 ```
 
 ```{r}
-p <- ggplot(data = nwsl_cluster_df,
-            aes(x = age, y = starts, col = as.factor(clusters)))
+p <- ggplot(data = nwsl_hclust_df,
+            aes(x = age, y = starts, 
+                col = as.factor(clusters),
+                pch = as.factor(clusters)))
 p + geom_point(alpha = .75) +
-  scale_color_brewer("cluster", palette = "Dark2") +
-  labs(shape = "position",
-       x = "Age of Players",
-       y = "Number of Starts")
+  scale_color_grey("cluster") +
+  labs(x = "Age of Players",
+       y = "Number of Starts") +
+  guides(col = "none",
+         pch = guide_legend(title = "cluster"))
+
 ```
 It looks like this clustering is dominated by the `age` and `starts` variabldes. 
 
@@ -410,8 +428,7 @@ $\boldsymbol{\mu}_2 = c(30, 0.5)^\prime$, $\pi_1 = 0.15$, and $\pi_2 = 0.85$.
 
 ```{r}
 set.seed(109823)
-nwsl_mix_df <- nwsl_cluster_df |> 
-  filter(xGxAp90 < 2)
+nwsl_mix_df <- nwsl_cluster_df 
 mix_model <- mvnormalmixEM(nwsl_mix_df[, c("age", "xGxAp90")], 
                            arbvar = FALSE,
                            mu = list(c(21, .1), c(30, .5)),
@@ -464,14 +481,16 @@ nwsl_mix_df <- nwsl_mix_df |>
 
 ```{r}
 p <- ggplot(data = nwsl_mix_df,
-            aes(x = age, y = xGxAp90, col = class))
+            aes(x = age, y = xGxAp90, 
+                col = class,
+                pch = class))
 p + geom_point() +
   geom_point(data = data.frame(age = c(mix_model$mu[[1]][1], mix_model$mu[[2]][1]),
                                xGxAp90 = c(mix_model$mu[[1]][2], mix_model$mu[[2]][2])),
-             aes(x = age, y = xGxAp90), col = "black", shape = 17, size = 3) +
-  scale_color_brewer(palette = "Set1") +
-  labs(color = "cluster") +
-  theme_bw()
+             aes(x = age, y = xGxAp90), col = "black", shape = 23, size = 3) +
+  scale_color_grey("cluster") +
+  guides(color = "none",
+         pch = guide_legend(title = "cluster"))
 ```
 
 ```{r}
