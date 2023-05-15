@@ -161,7 +161,8 @@ and reassign each observation until observations stop being reassigned.
 
 First let's look at a clustering based on age of the player (age), total minutes 
 played in the season (min), and expected goals and assists per ninety minutes 
-played (xGxAp90). We are going to consider three clusters initially. 
+played (xGp90 and xAp90, respectively). We are going to consider three clusters 
+initially. 
 
 ```{r}
 nwsl_cluster_df <- nwsl_player_stats |> 
@@ -169,9 +170,6 @@ nwsl_cluster_df <- nwsl_player_stats |>
          xGxAp90, npxGp90, npxGxAp90) |> 
   filter(xGxAp90 < 1.5, pos != "GK") |> 
   na.omit()
-  # mutate(player_team = paste(player, squad, sep = "_")) |> 
-  # select(player, squad, player_team, pos, age, min, starts, xGp90, xAp90, 
-  #        xGxAp90, npxGp90, npxGxAp90) |> 
 
 set.seed(9019)
 
@@ -207,17 +205,17 @@ players playing (roughly) 500 to 1200 minutes, and finally the last cluster
 contains players playing less than 500 minutes. 
 
 Is anything else evident if we omit minutes played and plot age of the player 
-versus expected goals and assists? 
+versus expected goals and or assists? 
 
 ```{r}
 p <- ggplot(data = nwsl_cluster_df,
-            aes(x = age, y = xGxAp90,  
+            aes(x = age, y = xGp90,  
                 pch = as.factor(k_means), 
                 col = as.factor(k_means)))
 p + geom_point() +
   scale_color_grey("cluster") +
   labs(x = "Age of Player",
-       y = "Expected Goals and Assists per 90") +
+       y = "Expected Goals per 90") +
   guides(col = "none",
          pch = guide_legend(title = "cluster"))
 
@@ -501,7 +499,7 @@ p + geom_point() +
                                xGxAp90 = c(mix_model$mu[[1]][2], mix_model$mu[[2]][2])),
              aes(x = age, y = xGxAp90), col = "black", shape = 17, size = 3) +
 
-  scale_color_distiller("Probability", palette = "Set1", limits = c(0, 1)) +
+  scale_color_distiller("Probability", palette = "Greys", limits = c(0, 1)) +
   labs(color = "cluster",
        x = "Age",
        y = "Expected Goals and Assists per 90") +
