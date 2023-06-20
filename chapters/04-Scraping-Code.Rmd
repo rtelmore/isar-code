@@ -75,19 +75,17 @@ nhl_data <- readRDS("../data/nhl-hockey-reference-2022.rds")
 
 ### Problem 1
 
-What team won the Stanley Cup in 2017 (use Google)? Find the player who had the
-highest percent Corsi value on that team. Interpret the value. Note: My friend was 
-their director of hockey research and got to spend a day with the Stanley Cup. 
+What team won the Stanley Cup in 2017 (use Google)? Find the player who had the highest percent Corsi value on that team. Interpret the value. 
 
 ### Answer 1
 
 Pittsburgh. 
 
 ```{r}
-nhl_data %>%
+nhl_data |> 
   filter(tm == "PIT", 
-         season == "2017") %>% 
-  select(player, cf_percent) %>%
+         season == "2017") |> 
+  select(player, cf_percent)  |> 
   arrange(desc(as.numeric(cf_percent)))
 ```
 
