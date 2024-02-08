@@ -1,0 +1,22 @@
+project:
+  type: book
+book:
+  title: "Introduction to Sports Analytics using R"
+  author: "Ryan Elmore and Andrew Urbaczewski"
+  repo-url: https://github.com/rtelmore/isar-code/
+  chapters:
+    - index.qmd
+    - ch-01-intro.qmd
+    - ch-02-intro-to-R.qmd
+    - ch-03-web-scraping.qmd
+    - ch-04-baseball.qmd
+    - ch-05-basketball.qmd
+execute:
+  eval: false
+format:
+  html:
+    theme: cosmo
+  pdf:
+    documentclass: scrreprt
+    toc-depth: 2
+    lof: true

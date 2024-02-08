@@ -1,0 +1,15 @@
+# Introduction
+
+## Why Sports Analytics
+
+## What is Sports Analytics
+
+## Careers in Sports Analytics
+
+## Off-The-Field Analytics
+
+## How this Book is Organized
+
+### Research Block - Do Players Get Streaky? {.unnumbered}
+
+### Case Study: Transitioning to Analytic Thinking in Sports {.unnumbered}

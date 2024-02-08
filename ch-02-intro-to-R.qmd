@@ -1,0 +1,437 @@
+# Introduction to R
+
+## Background
+
+## R Software
+
+## RStudio
+
+## Getting Your Machine Ready To Follow Along With This Book
+
+```{r}
+2 + 2
+```
+
+## R Packages
+
+```{r}
+#| include: true
+
+library(remotes) # used to install R packages from github repositories
+library(ISAR) # the authors' package to accompany this textbook
+library(Lahman) # a lot of baseball data
+library(dplyr) # tidyverse package for manipulating data
+library(ggplot2) # tidyverse package for data visualization
+```
+
+```{r}
+#| eval: false
+
+# Install the remotes package
+install.packages("remotes")
+# Load remotes to my library for use in this R session
+library(remotes)
+# Install the ballr package from github
+install_github("rtelmore/ballr") 
+# Load ballr to my library for use in this R session
+library(ballr)
+# Alternatively, install without loading remotes to the 
+#  library, i.e. using the install_github function without 
+#  loading remotes.
+remotes::install_github("rtelmore/ballr")
+```
+
+```{r}
+#| eval: false
+
+install.packages("ISAR")
+## or
+remotes::install_github("rtelmore/ISAR")
+```
+
+## Programming in R
+
+## Data Storage in R
+
+```{r}
+field_goals <- 2
+4*field_goals
+```
+
+```{r}
+pts_by_field_goals <- field_goals*3
+pts_by_field_goals
+```
+
+```{r}
+pitch <- "ball" 
+pitch_count <- 115
+```
+
+```{r}
+## vector of character Team Names for the NL West division 
+##  in baseball
+nl_west_teams <- c("Arizona Diamondbacks",
+                    "Colorado Rockies", 
+                    "Los Angeles Dodgers",
+                    "San Diego Padres", 
+                    "San Francisco Giants") 
+ 
+## vector of numbers, specifically Nikola Jokic's FG PCT, 
+##  3PT FG PCT, and FT PCT during the 2023 NBA playoffs
+jokic_shooting_slash <- c(0.58, 0.42, 0.84) 
+## vector of logicals, whether the Denver Broncos made the 
+##  playoffs or not from 2015-2022.
+broncos_playoffs <- c(TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE)
+```
+
+```{r}
+broncos_playoffs[1:2]
+```
+
+```{r}
+jokic_shooting_slash[c(1, 3)]
+```
+
+```{r}
+## Assign Par by hole at Cherry Hills Country Club to be an integer
+cherry_hills_par <- c(4.0, 4.0, 4.0, 4.0, 5.0, 3.0, 4.0, 3.0, 4.0, 
+                      4.0, 5.0, 3.0, 4.0, 4.0, 3.0, 4.0, 5.0, 5.0)
+as.integer(cherry_hills_par[18])
+```
+
+```{r}
+## 3x4 matrix and populate it with the scores for the three players 
+## for each of the four rounds. 
+pga_2020_top_three <- matrix(c(69, 69, 65, 64,
+                               68, 67, 68, 66,
+                               69, 67, 65, 68), 
+                             nrow = 3, ncol = 4, byrow = TRUE) 
+pga_2020_top_three #print the matrix to the console
+```
+
+```{r}
+colnames(pga_2020_top_three) <- c("round_1", "round_2", 
+                                  "round_3", "round_4")
+rownames(pga_2020_top_three) <- c("Morikawa", "Casey", "Johnson")
+pga_2020_top_three #print the matrix to the console
+```
+
+```{r}
+pga_2020_top_three[2, ]
+```
+
+```{r}
+pga_2020_top_three[2, c(3, 4)]
+```
+
+```{r}
+wild_bill <- list("William", "Karlsson", "1/8/1993", "Forward", 
+                  "Left", "Vegas Golden Knights", "Sweden", 14, 
+                  39, 53)
+wild_bill
+```
+
+```{r}
+races <- factor(c("downhill", "superg", "downhill", "gs", "slalom", 
+                  "slalom", "dcombined"))
+races
+```
+
+```{r}
+df <- data.frame(balls = c(4, 2, 0, 1, 2, 1, 0, 3, 2),
+                 strikes = c(0, 2, 2, 1, 1, 2, 1, 2, 2),
+                 pitches = c(4, 5, 3, 2, 3, 3, 1, 6, 4))
+df
+```
+
+```{r}
+df$pitches
+```
+
+```{r}
+df[1:3, "pitches"]
+```
+
+## Coding Techniques
+
+```{r}
+for (i in 1:5){
+  print(i)
+}
+```
+
+```{r}
+#| eval: false
+
+for (i in something) {  # decide how many times your want the loop to execute
+  some code             # the code that we want to repeat i times
+}
+```
+
+```{r}
+races <- factor(c("downhill", "superg", "downhill", "gs", "slalom", 
+                  "slalom", "dcombined"))
+for (race in races) {
+  statement <- paste("Andrew competed in the", race)
+  print (statement)
+}
+```
+
+```{r}
+#| eval: false
+
+if( logical_condition ) {
+ # execute code if the condition is true
+}
+ # Continue with the rest of the script
+```
+
+```{r}
+#| eval: false
+
+if(condition) {
+  # execute code that runs when the condition is true
+} else {
+  # execute code that runs when the condition is false
+}
+  # Continue with the rest of the script
+```
+
+```{r}
+#| eval: false
+
+if ( condition_1 ) {
+  # execute code that runs when condition1 is true
+} else if ( condition_2 ) {
+  # execute code that runs when condition1 is false but condition2 is true
+} else {
+  # execute code that runs when both condition1 and condition2 are false
+}
+  # Continue with the rest of the script
+```
+
+```{r}
+#| eval: false
+
+while (logical_condition) {
+  # Only evaluate this code while the logical_condition is
+  #  TRUE.
+}
+```
+
+## Exploratory Data Analysis in R
+
+```{r}
+#| label: tbl-basic-funs
+#| tbl-cap: Basic statistical functions in R. 
+#| echo: false
+
+df <- data.frame(Function = c("max(x)", "min(x)", "mean(x)", "median(x)", 
+                              "quantile(x, 0.25)", "quantile(x, 0.75)",
+                              "IQR(x)", "sd(x)", "var(x)", "summary(x)"),
+                 Description = c("maximum value in object x",
+                                 "minimum value in object x",
+                                 "mean value of object x",
+                                 "median value of object x",
+                                 "first quartile of object x",
+                                 "third quartile of object x",
+                                 "interquartile range of object x",
+                                 "standard deviation of object x",
+                                 "variance of object x",
+                                 "summary measures of object x"))
+df |> 
+  gt::gt() |> 
+  gt::opt_row_striping()
+```
+
+```{r}
+str(Batting)
+```
+
+```{r}
+rox_batting <- subset(Batting, teamID == "COL" & yearID == 2022)
+```
+
+```{r}
+dim(rox_batting)
+```
+
+```{r}
+length(rox_batting)
+```
+
+```{r}
+mean(rox_batting$HR)
+median(rox_batting$HR)
+sd(rox_batting$HR)
+```
+
+```{r}
+#| fig-cap: Home runs by player for the 2022 Colorado Rockies.
+#| label: fig-rox-histogram
+
+hist(rox_batting$HR, 
+     main = "Home Runs by Player: 2022 Rockies",
+     xlab = "home runs", 
+     ylab = "frequency")
+```
+
+```{r}
+#| fig-cap: Scatterplot of home runs (x) and runs batted in (y) for the 2022 Colorado Rockies
+#| fig-width: 8
+#| fig-height: 6
+#| label: fig-rox-scatterplot
+
+plot(x = rox_batting$HR, 
+     y = rox_batting$RBI,
+     main = "Home Runs vs RBIs by Player: 2022 Rockies",
+     xlab = "home runs (HR)", 
+     ylab = "runs batted in (RBI)", 
+     pch = 16)
+rox_regression <- lm(RBI ~ HR, data = rox_batting)
+abline(rox_regression, col = "black") 
+grid()
+```
+
+## R Markdown or Quarto
+
+```{r}
+#| fig-cap: Team home runs (HR) by year for the Colorado Rockies.
+#| label: fig-rox-hr-year
+#| eval: false
+
+## The Lahman package includes several data sets including one 
+##  named Batting. We will subset the data to include only data
+##  from the Colorado Rockies.
+df <- subset(Batting, teamID == "COL") 
+## Compute the total number of home runs per year
+df_by_year <- aggregate(HR ~ yearID, data = df, FUN = sum)
+plot(x = df_by_year$yearID, 
+     y = df_by_year$HR, 
+     type = "b",
+     pch = 16, 
+     xlab = "year", 
+     ylab = "home runs")
+grid()
+```
+
+## R Markdown File 
+
+```{r}
+#| fig-cap: RStudio screenshot showing how to create a new R Markdown file.
+#| label: fig-rmarkdown
+#| out-width: 100%
+#| echo: false
+
+knitr::include_graphics("fig/NewRMarkdownDocScreenshot.png")
+```
+
+## Introduction to the Tidyverse
+
+```{r}
+df <- tibble(Batting)
+str(df)
+```
+
+```{r}
+#| fig-cap: "An illustration of plumbing, or pipes." 
+#| label: fig-pipes
+#| echo: false
+
+knitr::include_graphics("fig/pipe.png")
+```
+
+```{r}
+df <- tibble(Batting) |>  ## Assign Batting to df as a tibble
+  filter(teamID %in% c("COL", "MIA", "FLO")) |> 
+  mutate(teamID = as.character(teamID), # Change teamID to a string
+         teamID = ifelse(teamID == "FLO", "MIA", teamID)) |> # FLO to MIA
+  group_by(teamID, yearID) |>  ## Group by team and year
+  summarize(team_hr = sum(HR)) ## sum total HR
+head(df)
+```
+
+
+```{r}
+names(AllstarFull)
+```
+
+```{r}
+mlb_all_stars_2022 <- AllstarFull |> 
+  filter(yearID == 2022) |> 
+  left_join(People, by = "playerID") |> 
+  select(nameFirst, nameLast, startingPos, teamID, lgID, bats, throws)
+head(mlb_all_stars_2022)
+```
+
+```{r}
+#| fig-cap: A basic `ggplot` using only the `geom_point` layer. 
+#| label: fig-gg-pt
+#| fig-width: 8
+#| fig-height: 5
+
+p <- ggplot(data = df, aes(x = yearID, y = team_hr, col = teamID))
+
+p + geom_point() +
+  scale_color_brewer(palette = "Set1") +
+  labs(x = "Year",
+       y = "Home Runs",
+       title = "Home Runs by Year",
+       subtitle = "Colorado Rockies and Miami Marlins"
+  ) +
+  theme_bw()
+```
+
+```{r}
+#| fig-cap: A `ggplot` with both points (`geom_point`) and lines (`geom_line`) layers. 
+#| label: fig-gg-pt-line
+#| fig-width: 8
+#| fig-height: 5
+
+p <- ggplot(data = df, aes(x = yearID, y = team_hr, col = teamID))
+
+p + geom_point() +
+  geom_line() +
+  scale_color_brewer(palette = "Set1") +
+  labs(x = "Year",
+       y = "Home Runs",
+       title = "Home Runs by Year",
+       subtitle = "Colorado Rockies and Miami Marlins"
+  ) +
+  theme_bw()
+```
+
+```{r}
+#| fig-cap: A `ggplot` with both points (`geom_point`) and lines (`geom_line`) layers and we show individual panes, or facets (`facet_grid`) for each team.
+#| label: fig-gg-pt-line-facet
+#| fig-width: 8
+#| fig-height: 5
+
+p <- ggplot(data = df, aes(x = yearID, y = team_hr))
+
+p + geom_point() +
+  geom_line() +
+  facet_grid(~ teamID) +
+  labs(x = "Year",
+       y = "Home Runs",
+       title = "Home Runs by Year",
+       subtitle = "Colorado Rockies and Miami Marlins"
+  ) +
+  theme_bw()
+```
+
+## Getting Help
+
+```{r}
+help(mean)
+?(mean)
+help.search("plotting")
+```
+
+## Conclusion
+
+## Lab: Introduction to R with Lahman
+
+## Exercises
+
