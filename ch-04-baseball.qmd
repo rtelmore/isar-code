@@ -1,0 +1,647 @@
+# Baseball
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(Lahman)
+```
+
+```{r}
+install_github("BillPetti/baseballr")
+```
+
+```{r}
+library(ggcorrplot) # used with ggplot2 to visualize correlation matrices
+library(broom) # converts statistical objects into Tibbles
+library(baseballr) # scrapes data and calculates baseball metrics
+library(lubridate) # eases the process of working with dates
+library(mgcv) #enables GAM modeling and smoothness estimations
+```
+
+## Introduction
+
+## If You Don't Know Anything about Baseball
+## Sabermetrics
+
+## Basic Baseball Metrics
+
+```{r}
+team_df <- tibble(Teams) |> 
+  filter(yearID >= 1970)
+head(team_df)
+```
+
+One problem you may notice is that singles (one-base hits) are not traditionally explicitly recorded separately and Lahman follows that ontology. We will need to know that number when we calculate total bases. How can we compute singles? Let’s create a new column, X1B and calculate it as the number of hits less the sum of doubles, triples, and home runs. Let us also do a bit of cleaning with the HBP column to make sure that a missing value for hit by pitch is interpreted as a zero. Finally, we will then add a column for Runs Created (RC) using the above formula and plot it against the actual runs scored by each team in each year. 
+
+```{r}
+rc_df <- team_df |> 
+  mutate(HBP = ifelse(is.na(HBP), 0, as.numeric(HBP)), 
+         X1B = H - X2B - X3B - HR, #singles 
+         TB = X1B + 2*X2B + 3*X3B + 4*HR, #total bases 
+         RC = (H + BB + HBP)*TB/(AB + BB + HBP))
+head(rc_df)
+```
+
+```{r}
+#| fig-cap: Calculated runs created (x) versus actual runs for all teams since 1970.
+#| label: fig-runs-created-runs
+
+p <- ggplot(data = rc_df,
+            aes(x = RC, y = R))
+p + geom_point(alpha = .15) + 
+  geom_smooth(method = "lm", col = "black") + ## similar to trendline 
+  labs(x = "runs created", y = "actual runs") + 
+  theme_bw()
+```
+
+```{r}
+rc_r_lm <- lm(R ~ RC, data = rc_df) 
+summary(rc_r_lm)
+```
+```{r}
+rc_df |> 
+  mutate(R_hat = as.vector(predict(rc_r_lm))) |> 
+  filter(yearID == 2022, teamID == "COL") |> 
+  select(R, RC, R_hat)
+```
+
+```{r}
+#| fig-cap: Correlation matrix for runs, runs created, at bats, hits, home runs, strike outs, and times caught stealing a base. 
+#| label: fig-corr-plot
+
+cor_mat <- cor(dplyr::select(rc_df, R, RC, AB, H, HR, SO, CS))
+ggcorrplot(cor_mat, method = "circle", 
+           colors = c( "#2c7bb6", "#ffffbf", "#d7191c"))
+```
+
+## Linear Regression
+
+```{r}
+#| label: fig-baseball-hr-vs-r
+#| fig-cap: "Home runs (x) versus runs scored (y) by player since 2000 in the Lahman data base."
+
+df_batting <- Batting |> 
+  filter(yearID >= 2000, AB >= 100)
+p <- ggplot(data = df_batting,
+            aes(x = HR, y = R))
+p + geom_point(alpha = .15) +
+  geom_smooth(method = "lm", col = "black") +
+  labs(x = "home runs", y = "runs") +
+  theme_bw()
+```
+
+```{r}
+lm_batting_1 <- lm(R ~ HR,
+                   data = df_batting)
+summary(lm_batting_1)
+```
+
+```{r}
+confint(lm_batting_1, level = .99)
+```
+
+```{r}
+df_batting_new <- df_batting |> 
+  mutate(pred_R = predict(lm_batting_1))
+head(df_batting_new)
+```
+
+```{r}
+new_data <- data.frame(R = c(NA, NA),
+                       HR = c(30, 15))
+predict(lm_batting_1, 
+        newdata = new_data, 
+        interval = "confidence", 
+        level = 0.95)
+```
+
+## Player Comparisons using Runs Above Average
+```{r}
+df_teams <- tibble(Teams) |> 
+  filter(yearID >= 2010) |> 
+  mutate(X1B = H - X2B - X3B - HR,
+         BB_HBP = BB + HBP) |> 
+  select(yearID, R, X1B, X2B, X3B, HR, BB_HBP) 
+head(df_teams)
+```
+
+```{r}
+lm_runs <- lm(R ~ . - yearID, data = df_teams) ## Multiple regression model
+summary(lm_runs)
+```
+
+```{r}
+#| eval: false
+
+lm_runs <- lm(R ~ X1B + X2B + X3B + HR + BB_HBP, data = df_teams)
+```
+
+```{r}
+tidy(lm_runs)
+```
+```{r}
+head(augment(lm_runs))
+```
+
+```{r}
+plot(lm_runs)
+```
+
+## Runs Above Average: Mike Trout (2018)
+
+```{r}
+playerInfo(nameLast = "Trout")
+```
+
+```{r}
+trout <- tibble(Batting) |> 
+  filter(playerID == "troutmi01", yearID == 2018) |> 
+  mutate(X1B = H - X2B - X3B - HR,
+         BB_HBP = BB + IBB + HBP,
+         Outs = .982*AB - H + GIDP + SF + SH + CS) |> 
+  select(yearID, R, X1B, X2B, X3B, HR, BB_HBP, Outs)
+head(trout)
+```
+
+```{r}
+avg_team <- df_teams |> 
+  filter(yearID == 2018) |> 
+  summarize_all(.funs = mean) ## compute the mean of each column in df_teams
+predict(lm_runs, newdata = avg_team) ## predict(lm_object, newdata)
+```
+
+```{r}
+avg_outs <- Teams |> 
+  filter(yearID == 2018) |> 
+  summarize(outs = mean(IPouts))
+avg_outs
+```
+
+```{r}
+trout_scale <- (avg_outs$outs - trout$Outs)/avg_outs$outs
+trout_scale
+```
+
+```{r}
+avg_team_w_trout <- avg_team*trout_scale + 
+  select(trout, yearID, R, X1B, X2B, X3B, HR, BB_HBP)
+avg_team_w_trout
+```
+
+```{r}
+predict(lm_runs, newdata = avg_team_w_trout) - predict(lm_runs, newdata = avg_team)
+```
+
+```{r}
+playerInfo(nameLast = "Desmond")
+```
+
+```{r}
+ian <- tibble(Batting) |> 
+  filter(playerID == "desmoia01", yearID == 2018) |> 
+  mutate(X1B = H - X2B - X3B - HR,
+         BB_HBP = BB + IBB + HBP,
+         Outs = .982*AB - H + GIDP + SF + SH + CS) |> 
+  select(yearID, R, X1B, X2B, X3B, HR, BB_HBP, Outs)
+ian_scale <- (avg_outs$outs - ian$Outs)/avg_outs$outs
+avg_team_w_ian <- avg_team*ian_scale + 
+  select(ian, yearID, R, X1B, X2B, X3B, HR, BB_HBP)
+predict(lm_runs, newdata = avg_team_w_ian) - predict(lm_runs, newdata = avg_team)
+```
+
+## Analyzing Defense -- Pitching
+
+```{r}
+df_team <- Teams |> 
+  filter(yearID >= 1970) |> 
+  mutate(FIP = (13*HRA + 3*BBA - 2*SOA)/IPouts + 3.10)
+```
+
+```{r}
+#| label: fig-baseball-fip-era
+#| fig-cap: "Field independent pitching (x) versus earned run average (y) for every team since 1970 in the Lahman data base."
+
+p <- ggplot(data = df_team,
+            aes(x = FIP, y = ERA))
+p + geom_point(alpha = .25) +
+  theme_bw()
+```
+
+## Statcast
+
+```{r}
+ohtani_id <- playerid_lookup(last_name = "Ohtani", 
+                             first_name = "Shohei")
+```
+
+```{r}
+df_ohtani_bat <- scrape_statcast_savant(start_date = ymd("2023-03-30"), 
+                                        end_date = ymd("2023-10-01"), 
+                                        playerid = 660271)
+```
+
+```{r}
+cole_id <- playerid_lookup(last_name = "Cole", 
+                           first_name = "Gerrit")$mlbam_id
+df_cole_pitch <- scrape_statcast_savant(start_date = ymd("2023-03-30"), 
+                                        end_date = ymd("2023-10-01"), 
+                                        playerid = cole_id,
+                                        player_type = "pitcher")
+```
+
+```{r}
+#| label: fig-baseball-ohtani-bat-unordered
+#| fig-cap: "Bar chart showing the proportion of pitch types thrown to Shohei Ohtani in 2023."
+
+p <- ggplot(df_ohtani_bat, 
+            aes(x = pitch_type, y = ..prop.., group = 1))
+p + geom_bar() +
+  labs(title = "Types of Pitches Thrown to Shohei Ohtani in 2023",
+       x = "Pitch Type",
+       y = "Proportion of Pitches") + 
+  theme_bw()
+```
+
+
+```{r}
+#| label: fig-baseball-ohtani-bat
+#| fig-cap: "Ordered bar chart showing the proportion of pitch types thrown to Shohei Ohtani in 2023."
+
+df_ohtani_grouped <- df_ohtani_bat |>
+  group_by(pitch_type) |> 
+  summarize(perc = n()/nrow(df_ohtani_bat)) |> 
+  arrange(desc(-perc)) |> 
+  mutate(pitch_type = factor(pitch_type, pitch_type))
+
+p <- ggplot(df_ohtani_grouped, 
+            aes(x = pitch_type, y = perc))
+p + geom_bar(stat = "identity", fill = "gray40") +
+  scale_y_continuous(labels = scales::percent) +
+  coord_flip() +
+  labs(title = "Types of Pitches Thrown to Shohei Ohtani in 2023",
+       x = "Pitch Type",
+       y = "Proportion of Pitches") + 
+  theme_bw()
+```
+
+```{r}
+#| label: fig-baseball-ohtani-ev
+#| fig-cap: "Violin plots showing the Shohei Ohtani's exit velocity by pitch type thrown to him in 2023."
+
+p <- df_ohtani_bat |> 
+  filter(pitch_type %in% c("CH", "CU", "FC", "FF", "SI", "SL", "FS"),
+         type == "X") |> 
+  ggplot(aes(x = pitch_type, y = launch_speed))
+
+p + geom_violin(fill = "gray40") + 
+  scale_fill_grey("type") +
+  labs(title = "Shohei Ohtani's Exit Velocity by Pitch Type in 2023",
+       x = "Pitch Type",
+       y = "Exit Velocity (mph)") +
+  scale_y_continuous(breaks = seq(60, 120, by = 10)) +
+  coord_flip() +
+  theme_bw()
+```
+
+```{r}
+#| label: fig-baseball-ohtani-ev-density
+#| fig-cap: "Density plots showing the Shohei Ohtani's exit velocity by pitch type thrown to him in 2023."
+
+p <- df_ohtani_bat |> 
+  filter(pitch_type %in% c("CH", "CU", "FC", "FF", "SI", "SL", "FS"),
+         type == "X") |>
+  ggplot(aes(x = launch_speed))
+
+p + geom_density(alpha = 0.5, fill = "gray40") + 
+  facet_wrap(. ~ pitch_type, ncol = 3) + 
+  labs(title = "Shohei Ohtani's Exit Velocity by Pitch Type in 2023",
+       x = "Pitch Type",
+       y = "Exit Velocity (mph)") +
+  scale_y_continuous(breaks = seq(60, 120, by = 10)) +
+  theme_bw()
+```
+
+```{r}
+#| label: fig-baseball-cole-bar
+#| fig-cap: "Bar chart showing the proportion of pitch types thrown by Gerrit Cole in 2023."
+
+p <- ggplot(df_cole_pitch, 
+            aes(x = pitch_type, y = ..prop.., group = 1))
+p + geom_bar() +
+  labs(title = "Types of Pitches Thrown by Gerrit Cole in 2023",
+       x = "Pitch Type",
+       y = "Proportion of Pitches") + 
+  theme_bw()
+
+```
+
+```{r}
+#| label: fig-baseball-cole-spin
+#| fig-cap: "Violin plots showing the spin rate by pitch types thrown by Gerrit Cole in 2023."
+
+p <-  df_cole_pitch |> 
+  filter(pitch_type %in% c("CH", "FC", "FF", "SL", "KC"),
+         type == "X")  |> 
+  ggplot(aes(x = pitch_type, y = release_spin_rate))
+
+p + geom_violin(fill = "gray40") + 
+  scale_fill_grey("type") +
+  labs(title = "Gerrit Cole's Spin Rate by Pitch Type in 2023",
+       x = "Pitch Type",
+       y = "Spin Rate") +
+  coord_flip() +
+  theme_bw()
+```
+
+```{r}
+#| label: fig-baseball-cole-rel-speed
+#| fig-cap: "Average release speed in each month of the 2023 season by pitch types thrown by Gerrit Cole."
+
+p <-  df_cole_pitch |> 
+  filter(pitch_type %in% c("CH", "FC", "FF", "SL", "KC"),
+         type == "X",
+         game_date >= ymd("2023-04-01")) |> 
+  group_by(month = month(game_date), pitch_type) |> 
+  summarize(avg_sp = mean(release_speed)) |> 
+  ggplot(aes(x = month, y = avg_sp, linetype = pitch_type))
+
+p + geom_line() +
+  geom_point() +
+  scale_color_brewer("type", palette = "Dark2") +
+  scale_x_continuous(labels = c("Mar", "Apr", "May", "Jun", 
+                                "Jul", "Aug", "Sep"),
+                     breaks = 3:9) +
+  labs(title = "Gerrit Cole's Average Release Speed by Pitch Type in 2023",
+       x = "Month",
+       y = "Release Speed (mph)") +
+  theme_bw()
+```
+
+## Strike Zones
+
+```{r}
+plate_width <- 17 + 2 * (9/pi)
+```
+
+```{r}
+#| label: fig-baseball-strike-zone
+#| fig-cap: "All pitch locations to Shohei Ohtani during the 2023 season."
+
+p <- ggplot(df_ohtani_bat,
+            aes(x = plate_x,
+                y = plate_z))
+p + geom_point(alpha = 0.2) +
+  geom_rect(xmin = -(plate_width/2)/12, 
+            xmax = (plate_width/2)/12, 
+            ymin = 1.5, 
+            ymax = 3.6, 
+            alpha = 0,
+            lwd = .7,
+            col = "red") +
+  labs(x = "Horizontal Location (ft)",
+       y = "Vertical Location (ft)") +
+  xlim(-4, 4) +
+  coord_fixed() +
+  theme_bw()
+```
+
+```{r}
+#| label: fig-baseball-strike-zone-col
+#| fig-cap: "All pitch locations to Shohei Ohtani during the 2023 season colored by whether (1) or not (0) he swung."
+
+df_ohtani_bat <- df_ohtani_bat |> 
+  mutate(swing = ifelse(description %in% c("ball", "blocked_ball",
+                                           "automatic_ball", "called_strike",
+                                           "hit_by_pitch"), 0 , 1))
+p <- ggplot(df_ohtani_bat,
+            aes(x = plate_x, y = plate_z, col = as.factor(swing)))
+p + geom_point(alpha = 0.5) +
+  scale_color_brewer("swing", palette = "Set1", labels = c("No", "Yes")) +
+  geom_rect(xmin = -(plate_width/2)/12, 
+            xmax = (plate_width/2)/12, 
+            ymin = 1.5, 
+            ymax = 3.6, 
+            alpha = 0,
+            lwd = .7,
+            col = "black") +
+  labs(x = "Horizontal Location (ft)",
+       y = "Vertical Location (ft)") +
+  xlim(-4, 4) +
+  coord_fixed() +
+  theme_bw()
+```
+
+```{r}
+#| label: fig-baseball-strike-zone-swing
+#| fig-cap: "All pitch locations to Shohei Ohtani in which he did not swing during the 2023 season colored by the pitch being called a ball or strike by the umpire."
+
+p <- df_ohtani_bat |> 
+  filter(swing == 0, type != "X")  |> 
+  ggplot(aes(x = plate_x, y = plate_z, col = type))
+
+p + geom_point(alpha = 0.5) +
+  scale_color_brewer("call", palette = "Set1") +
+  geom_rect(xmin = -(plate_width/2)/12, 
+            xmax = (plate_width/2)/12, 
+            ymin = 1.5, 
+            ymax = 3.6, 
+            alpha = 0,
+            lwd = .7,
+            col = "black") +
+  labs(x = "Horizontal Location (ft)",
+       y = "Vertical Location (ft)") +
+  xlim(-4, 4) +
+  coord_fixed() +
+  theme_bw()
+```
+
+## Estimating Probabilities
+
+```{r}
+trout_id <- playerid_lookup(last_name = "Trout", 
+                            first_name = "Mike")$mlbam_id
+df_trout_bat <- scrape_statcast_savant(start_date = ymd("2023-03-30"), 
+                                        end_date = ymd("2023-10-01"), 
+                                        playerid = trout_id)
+```
+
+```{r}
+df_trout_bat |> 
+  filter(type == 'X') |> 
+  select(type, events, launch_angle, launch_speed) |> 
+  head()
+```
+
+```{r}
+#| label: fig-baseball-strike-trout-den
+#| fig-cap: "Density plot for launch angle for Mike Trout's balls that were put into play during the 2023 season."
+
+p <- ggplot(data = df_trout_bat |> 
+              filter(type == 'X') |> 
+              select(type, events, launch_angle, pitch_type),
+            aes(x = launch_angle))
+p + geom_density() +
+  theme_bw()
+```
+
+```{r}
+df_trout_bat |> 
+  filter(type == "X") |> 
+  distinct(events)
+```
+
+```{r}
+df_trout_hits <- df_trout_bat |> 
+  filter(type == "X", !is.na(launch_angle)) |> 
+  mutate(hit = ifelse(events %in% c("single", "double", 
+                                    "triple", "home_run"),
+                      1, 0))
+```
+
+```{r}
+#| label: fig-baseball-strike-trout-la-hit
+#| fig-cap: "Mike Trout's hits (1) or not (0) along with their launch angle during the 2023 season."
+
+p <- ggplot(data = df_trout_hits,
+            aes(x = launch_angle, y = hit))
+p + geom_point(alpha = .15) + 
+  scale_x_continuous(breaks = seq(-60, 80, by = 20)) +
+  labs(x = "Launch Angle",
+       y = "Hit") +
+  geom_smooth(col = "black") +
+  theme_bw()
+```
+
+```{r}
+#| label: fig-baseball-strike-trout-ls-hit
+#| fig-cap: "Mike Trout's hits (1) or not (0) along with their launch speed during the 2023 season."
+
+p <- ggplot(data = df_trout_hits,
+            aes(x = launch_speed, y = hit))
+p + geom_point(alpha = .15) + 
+  labs(x = "Launch Speed",
+       y = "Hit") +
+  geom_smooth(col = "black") +
+  theme_bw()
+```
+
+## Logistic Regression Model
+
+```{r}
+glm_trout <- glm(hit ~ launch_angle, 
+                 data = df_trout_hits, 
+                 family = "binomial")
+summary(glm_trout)
+```
+
+```{r}
+#| label: fig-baseball-strike-trout-prob-la-hit
+#| fig-cap: "Estimated probability of Mike Trout getting a hit (1) or not (0) along as a function of launch angle during the 2023 season. We estimate the probability using a simple logistic regression model with launch angle as a predictor variable."
+
+p <- ggplot(data = df_trout_hits,
+            aes(x = launch_angle, y = hit))
+p + geom_point(alpha = .15) + 
+  scale_x_continuous(breaks = seq(-60, 80, by = 20)) +
+  geom_smooth(col = "black",
+              method = "glm", formula = y ~ x, 
+              method.args = list(family = "binomial")) +
+  labs(y = "P(hit)",
+       x = "Launch Angle") +
+  theme_bw()
+```
+
+```{r}
+glm_trout_2 <- glm(hit ~ poly(launch_angle, 2), 
+                   data = df_trout_hits, 
+                   family = "binomial")
+summary(glm_trout_2)
+```
+
+```{r}
+#| label: fig-baseball-strike-trout-prob-la-hit-quad
+#| fig-cap: "Estimate probability of Mike Trout getting a hit (1) or not (0) along as a function of launch angle during the 2023 season. We estimate the probability using a logistic regression model with a quadratic term in launch angle."
+
+p <- ggplot(data = df_trout_hits,
+            aes(x = launch_angle, y = hit))
+p + geom_point(alpha = .15) + 
+  scale_x_continuous(breaks = seq(-60, 80, by = 20)) +
+  geom_smooth(col = "black",
+              method = "glm", formula = y ~ poly(x, 2), 
+              method.args = list(family = "binomial")) +
+  labs(y = "P(Hit = 1)",
+       x = "Launch Angle") +
+  theme_bw()
+```
+
+```{r}
+#| label: fig-baseball-strike-trout-gets-hit
+#| fig-cap: "Pitch locations for pitches that hit Mike Trout in 2023."
+
+p <- df_trout_bat |> 
+  filter(description == "hit_by_pitch") |> 
+  ggplot(aes(x = plate_x, y = plate_z))
+
+p + geom_point() +
+  geom_rect(xmin = -(plate_width/2)/12, 
+            xmax = (plate_width/2)/12, 
+            ymin = 1.5, 
+            ymax = 3.6, 
+            alpha = 0,
+            lwd = .7,
+            col = "black") +
+  labs(x = "horizontal location (ft)",
+       y = "vertical location (ft)") +
+  xlim(-4, 4) +
+  ylim(0, 5) +
+  coord_fixed() +
+  theme_bw()
+```
+
+## Swing Probability
+
+```{r}
+swing_gam <- gam(swing ~ s(plate_x) + s(plate_z),
+                 family = binomial,
+                 data = df_ohtani_bat)
+```
+
+```{r}
+swing_predict_data <- expand.grid(plate_x = seq(-1.5, 1.5, length = 50), 
+                                  plate_z = seq(0.5, 5, length = 50))
+# Get the predicted values from the model and convert to probability values:
+swing_preds <- predict(swing_gam, 
+                       newdata = swing_predict_data, 
+                       type = "response")
+swing_predict_data <- swing_predict_data |> 
+  mutate(swing_prob = swing_preds)
+```
+
+```{r}
+p <- ggplot(data = swing_predict_data,
+            aes(x = plate_x, y = plate_z))
+
+p + geom_tile(aes(fill = swing_prob)) +
+  scale_fill_distiller("P(Swing)", palette = "Spectral",
+                       direction = -1,
+                       limit = c(0,1)) +
+  geom_rect(xmin = -(plate_width/2)/12, 
+            xmax = (plate_width/2)/12, 
+            ymin = 1.5, 
+            ymax = 3.6, 
+            alpha = 0,
+            lwd = .7,
+            col = "black") +
+  coord_fixed() +
+  labs(x = "Horizontal Location (ft)",
+       y = "Vertical Location (ft)",
+       title = "When Does Shohei Ohtani Swing?") +
+  theme_bw()
+```
+
+## Summary
+## Lab Four: Calculating Baseball Metrics
+
+## Case Study: Adjusting to Baseball in Colorado
+
+## Exercises
+
