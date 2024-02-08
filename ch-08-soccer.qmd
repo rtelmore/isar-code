@@ -1,0 +1,371 @@
+# Soccer
+
+## R Packages
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(rvest)
+library(janitor)
+library(scales)
+library(ISAR)
+```
+
+```{r}
+library(readr) # used to read rectangular data
+library(ggrepel) # adds non-overlapping text labels to graphs 
+library(ggdendro) # create dendrograms and tree diagrams with ggplot2
+library(mixtools) # tools for analyzing finite mixture models
+library(factoextra) # visualize the results of multivariate data analyses
+library(worldfootballR) # extract and clean world soccer data
+```
+
+## If you don’t know anything about soccer
+
+## Soccer Data
+
+```{r}
+#| eval: false
+
+nwsl_player_stats <- read.csv("nwsl-players.csv", header = T) |> 
+  clean_names() |> 
+  select(c(2:6, 8:10, 28:32)) |> 
+  rename(xGp90 = x_g_1,
+         xAp90 = x_ag_1,
+         xGxAp90 = x_g_x_ag,
+         npxGp90 = npx_g_1,
+         npxGxAp90 = npx_g_x_ag_1)
+```
+
+```{r}
+#| label: fig-soccer-xgp90
+#| fig-cap: "Player age (x) versus expected goals per 90 minutes played (y) during the 2022 NWSL season."
+
+p <- ggplot(data = nwsl_player_stats |> 
+              filter(pos != "GK"),
+            aes(x = age, y = xGp90))
+p + geom_point(alpha = .5) +
+  labs(title = "xG per 90 by Player Age", 
+       x = "Age of Player", 
+       y = "Expected Goals per 90 (xGp90)") +
+  theme_bw()
+```
+
+```{r}
+#| label: fig-soccer-xgp90-labels
+#| fig-cap: "Player age (x) versus expected goals per 90 minutes played (y) during the 2022 NWSL season with labels for players less than 20 years of age or an expected goals per 90 above 0.6."
+
+p <- ggplot(data = nwsl_player_stats |> 
+              filter(pos != "GK") |> 
+              mutate(new_player = ifelse((age < 20 & xGp90 > 0) | xGp90 > 0.6,
+                                         player, "")),
+            aes(x = age, y = xGp90, label = new_player))
+p + geom_point(alpha = .5) +
+  labs(title = "xG per 90 by Player Age", 
+       x = "Age of Player", 
+       y = "Expected goals per 90 (xGp90)") +
+  geom_text_repel() +
+  theme_bw()
+```
+
+
+## Clustering
+
+```{r}
+nwsl_cluster_df <- nwsl_player_stats |> 
+  select(player, squad, pos, age, min, starts, xGp90, xAp90, 
+         xGxAp90, npxGp90, npxGxAp90) |> 
+  filter(xGxAp90 < 1.5, pos != "GK") |> 
+  na.omit()
+
+set.seed(9019)
+
+km <- kmeans(select(nwsl_cluster_df, age, min, xGp90, xAp90) |> 
+               na.omit(),
+             centers = 3)
+```
+
+```{r}
+#| label: fig-soccer-age-min
+#| fig-cap: "Player age (x) versus minutes played (y) during the 2022 NWSL season. Point symbols represent cluster membership using a K-means clustering with three clusters."
+
+# add the cluster number to the data frame
+
+nwsl_cluster_df <- mutate(nwsl_cluster_df, k_means = km$cluster)
+
+p <- ggplot(data = nwsl_cluster_df,
+            aes(x = age, 
+                y = min, 
+                shape = as.factor(k_means), 
+                col = as.factor(k_means)))
+p + geom_point() +
+  scale_color_brewer("cluster", palette = "Set1") +
+  labs(title = "NWSL players clustered by PT and Age", 
+       x = "Age of Player",
+       y = "Minutes Played") +
+  guides(shape = guide_legend(title = "cluster"),
+         col = guide_legend(title = "cluster")) +
+  theme_bw()
+```
+
+
+```{r}
+#| label: fig-soccer-age-xg-cl
+#| fig-cap: "Player age (x) versus expected goals per 90 minutes played (y) during the 2022 NWSL season. Point symbols represent cluster membership using a K-means clustering with three clusters."
+
+p <- ggplot(data = nwsl_cluster_df,
+            aes(x = age, y = xGp90,  
+                shape = as.factor(k_means), 
+                col = as.factor(k_means)))
+p + geom_point() +
+  scale_color_brewer("cluster", palette = "Set1") +
+  labs(title = "NWSL players clustered by xGp90 and Age", 
+       x = "Age of Player",
+       y = "Expected Goals per 90") +
+  guides(shape = guide_legend(title = "cluster"),
+         col = guide_legend(title = "cluster")) +
+  theme_bw()
+```
+
+```{r}
+set.seed(9019)
+km <- kmeans(select(nwsl_cluster_df, age, xGp90, xAp90) |> 
+               na.omit(),
+             centers = 3)
+
+nwsl_cluster_df <- mutate(nwsl_cluster_df, clusters_two = km$cluster)
+```
+
+```{r}
+#| label: fig-soccer-age-xg-cl-2
+#| fig-cap: "Player age (x) versus expected goals per 90 minutes played (y) during the 2022 NWSL season. Point symbols represent cluster membership using a K-means clustering with three clusters (no minutes played)."
+
+p <- ggplot(data = nwsl_cluster_df,
+            aes(x = age, y = xGp90, 
+                col = as.factor(clusters_two),
+                shape = as.factor(clusters_two)))
+p + geom_point() +
+  scale_color_brewer("cluster", palette = "Set1") +
+    labs(title = "NWSL players clustered by xGp90 and Age", 
+       x = "Age of Player",
+       y = "Expected Goals per 90") +
+  guides(shape = guide_legend(title = "cluster"),
+         col = guide_legend(title = "cluster")) +
+  theme_bw()
+```
+
+```{r}
+#| label: fig-soccer-age-xa-cl-2
+#| fig-cap: "Player age (x) versus expected assists per 90 minutes played (y) during the 2022 NWSL season. Point symbols represent cluster membership using a K-means clustering with three clusters (without minutes played)."
+
+p <- ggplot(data = nwsl_cluster_df,
+            aes(x = age, y = xAp90, 
+                col = as.factor(clusters_two),
+                shape = as.factor(clusters_two)))
+p + geom_point() +
+  scale_color_brewer("cluster", palette = "Set1") +
+  labs(title = "NWSL players clustered by xAp90 and Age",
+       x = "Age of Player",
+       y = "Expected Assists per 90") +
+  guides(shape = guide_legend(title = "cluster"),
+         col = guide_legend(title = "cluster")) +
+  theme_bw()  
+```
+
+```{r}
+set.seed(9019)
+km <- kmeans(nwsl_cluster_df |> 
+               select(xGp90, xAp90) |> 
+               na.omit(),
+             centers = 3)
+```
+
+```{r}
+#| label: fig-soccer-xg-xa-cl-3
+#| fig-cap: "Expected assists per 90 (x) versus expected goals per 90 minutes played (y) during the 2022 NWSL season. Point symbols represent cluster membership using a K-means clustering with three clusters (no minutes played)."
+
+nwsl_cluster_df <- mutate(nwsl_cluster_df, clusters_three = km$cluster)
+p <- ggplot(data = nwsl_cluster_df,
+            aes(x = xAp90, y = xGp90, 
+                col = as.factor(clusters_three),
+                shape = as.factor(clusters_three)))
+p + geom_point() +
+  scale_color_brewer("cluster", palette = "Set1") +
+    labs(title = "NWSL players clustered by xGp90 and xAp90",
+       x = "Expected Assists per 90",
+       y = "Expected Goals per 90") +
+  guides(shape = guide_legend(title = "cluster"),
+         col = guide_legend(title = "cluster")) +
+  theme_bw()
+```
+
+```{r}
+#| label: fig-soccer-xg-xa-cl-4
+#| fig-cap: "Expected assists per 90 (x) versus expected goals per 90 minutes played (y) during the 2022 NWSL season. Colors represent cluster membership using a K-means clustering with three clusters (no minutes played) and point characters are position."
+
+p <- ggplot(data = nwsl_cluster_df |> 
+              mutate(short_pos = substr(pos, 1, 1)),
+            aes(x = xAp90, y = xGp90, 
+                pch = short_pos, 
+                col = as.factor(clusters_three)))
+p + geom_point(alpha = .75) +
+  scale_color_brewer("cluster", palette = "Set1") +
+  labs(pch = "position",
+       title = "NWSL players clustered by xGp90 and xAp90",
+       x = "Expected Assists per 90",
+       y = "Expected Goals per 90") +
+  theme_bw()
+```
+
+## Research Block: When and How to Pass the Ball?
+## Hierarchical Clustering
+
+```{r}
+nwsl_hclust_df <- nwsl_cluster_df |> 
+  select(player, squad, age, starts, xGp90, xAp90, xGxAp90, 
+                npxGp90, npxGxAp90) 
+hc <- hclust(dist(nwsl_hclust_df), "average")
+```
+
+```{r}
+#| label: fig-soccer-dendo
+#| fig-cap: "Dendogram based on the hierarchical clustering using average linkage."
+
+p <- ggdendrogram(hc, labels = F, size = 2)
+p
+```
+
+```{r}
+clusters <- cutree(hc, k = 5)
+table(clusters)
+```
+
+```{r}
+#| label: fig-soccer-hier
+#| fig-cap: "Player age (x) versus number of starts (y) with point shapes representing cluster membership based on the hierarchical clustering using average linkage."
+
+nwsl_hclust_df <- nwsl_hclust_df |> 
+  mutate(clusters = clusters)
+p <- ggplot(data = nwsl_hclust_df,
+            aes(x = age, y = starts, 
+                col = as.factor(clusters)))
+p + geom_point(alpha = .75) +
+  scale_color_brewer("cluster", palette = "Set1") +
+  labs(title = "NWSL players clustered by starting frequency",
+       x = "Age of Players",
+       y = "Number of Starts") +
+  theme_bw()
+```
+
+## Gaussian Mixtures
+
+```{r}
+set.seed(109823)
+nwsl_mix_df <- nwsl_cluster_df 
+mix_model <- mvnormalmixEM(nwsl_mix_df[, c("age", "xGxAp90")], 
+                           arbvar = FALSE,
+                           mu = list(c(21, .1), c(30, .5)),
+                           lambda = c(.15, .85),
+                           k = 2,
+                           epsilon = 1e-02,
+                           verb = T)
+```
+
+```{r}
+head(mix_model$posterior)
+```
+
+```{r}
+head(nwsl_mix_df[, c("age", "xGxAp90")])
+```
+
+```{r}
+mix_model$mu
+```
+```{r}
+#| label: fig-soccer-mm
+#| fig-cap: "Player age (x) versus expected goals plus assists per 90 (y) with point shapes representing cluster membership based on the two-component Gaussian mixture model."
+
+nwsl_mix_df <- nwsl_mix_df |> 
+  mutate(pp = mix_model$posterior[, 1],
+         class = ifelse(pp <= .5, "one", "two"))
+p <- ggplot(data = nwsl_mix_df,
+            aes(x = age, y = xGxAp90, 
+                col = class,
+                pch = class))
+p + geom_point() +
+  geom_point(data = data.frame(age = c(mix_model$mu[[1]][1], 
+                                       mix_model$mu[[2]][1]),
+                               xGxAp90 = c(mix_model$mu[[1]][2], 
+                                           mix_model$mu[[2]][2])),
+             aes(x = age, y = xGxAp90), 
+             col = "black", 
+             shape = 17, 
+             size = 3) +
+  scale_color_brewer("cluster", palette = "Set1") +
+  guides(pch = "none",
+         col = guide_legend(title = "cluster")) +
+  labs(title = "Gaussian Mixture Clustering of NWSL players",
+       x = "Age of Players",
+       y = "Expected Goals plus Assists per 90") +
+  theme_bw()
+```
+
+```{r}
+#| label: fig-soccer-mm-2
+#| fig-cap: "Player age (x) versus expected goals plus assists per 90 (y) with point color representing probability of cluster membership based on the two-component Gaussian mixture model."
+
+p <- ggplot(data = nwsl_mix_df,
+            aes(x = age, y = xGxAp90, col = pp))
+p + geom_point() +
+  geom_point(data = data.frame(age = c(mix_model$mu[[1]][1], 
+                                       mix_model$mu[[2]][1]),
+                               xGxAp90 = c(mix_model$mu[[1]][2], 
+                                           mix_model$mu[[2]][2])),
+             aes(x = age, y = xGxAp90), 
+             col = "black", 
+             shape = 17, 
+             size = 3) +
+  scale_color_distiller("Probability", palette = "Spectral", limits = c(0, 1)) +
+  labs(color = "cluster",
+       x = "Age",
+       y = "Expected Goals and Assists per 90") +
+  theme_bw()
+```
+
+```{r}
+mix_model$lambda
+```
+
+```{r}
+set.seed(109823)
+mix_model_2 <- mvnormalmixEM(nwsl_mix_df[, c("age", "xGxAp90")], 
+                             arbvar = FALSE,
+                             mu = list(c(25, .1), c(20, .5)),
+                             lambda = c(.5, .5),
+                             k = 2,
+                             epsilon = 1e-02,
+                             verb = T)
+```
+
+## Case Study: Soccer Roster Economics
+
+```{r}
+#| eval: false
+
+epl_valuations <- tm_player_market_values(country_name = "England",
+                                          start_year = 2021)
+```
+
+```{r}
+#| eval: false
+
+epl_stats_val <- dplyr::left_join(epl_player_stats_2022, epl_valuations,
+                                  by = c("player" = "player_name"))
+```
+
+## Lab: Goalkeeper Styles in the EPL
+
+## Exercises
+
