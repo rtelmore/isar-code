@@ -1,0 +1,15 @@
+# Resources {.unnumbered}
+
+Here are a few resources that you might find useful. 
+
+1. How can you buy the book? Here's a link!
+
+2. The book's R package (ISAR) with data
+
+    a. [CRAN](https://cran.r-project.org/web/packages/ISAR/index.html)
+  
+    b. [Github](https://github.com/rtelmore/ISAR)
+
+3. [Submit an issue related to code here.](https://github.com/rtelmore/isar-code/issues)
+
+4. Errata
