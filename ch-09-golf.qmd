@@ -1,0 +1,113 @@
+# Golf
+
+## R Packages
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(factoextra)
+library(ISAR) 
+```
+
+```{r}
+library(fmsb) # used to help us make radar charts
+```
+
+## If you don't know anything about golf
+
+## The Evolution of Golf Analytics
+
+## Advanced Golf Metrics
+
+## Exploring Golf through Basic and Advanced Statistics
+
+```{r}
+df <- left_join(pga_tournaments, 
+                ow_golf_rankings,
+                by = "Player_initial_last")
+```
+
+```{r}
+df_sub <- df |> 
+  select(Player_initial_last, sg_putt, sg_arg, 
+         sg_app, sg_ott, sg_t2g, sg_total, WGR_June_2022) |> 
+  na.omit()
+df_summarized <- df_sub |> 
+  group_by(Player_initial_last) |>
+  summarize(mean_sg_ott = mean(sg_ott, na.rm = TRUE),
+            mean_sg_app = mean(sg_app, na.rm = TRUE),
+            mean_sg_arg = mean(sg_arg, na.rm = TRUE),
+            mean_sg_putt = mean(sg_putt, na.rm = TRUE),
+            mean_WGR = mean(WGR_June_2022, na.rm = TRUE)) |> 
+  mutate(top_50 = ifelse(mean_WGR <= 50, T, F))
+```
+
+```{r}
+df_summarized_top_50 <- df_summarized |>
+  group_by(top_50) |> 
+  summarize(SGOTT = mean(mean_sg_ott, na.rm = TRUE),
+            SGAPP = mean(mean_sg_app, na.rm = TRUE),
+            SGARG = mean(mean_sg_arg, na.rm = TRUE),
+            SGPUTT = mean(mean_sg_putt, na.rm = TRUE))
+```
+```{r}
+df_SG_radarchart <- data.frame(SGOTT= c(0.4, -0.5), 
+                               SGAPP = c(0.4, -0.5), 
+                               SGARG = c(0.4, -0.5), 
+                               SGPUTT = c(0.4, -0.5)) |> 
+  bind_rows(df_summarized_top_50 |> select(-top_50))
+
+```
+
+```{r}
+#| label: fig-golf-radar
+#| fig-cap: "Radar plot showing four average strokes gained metrics for golfers in the top 50 versus those not in the top 50 of the OWGR."
+
+areas <- c(rgb(1,0,0,.25), rgb(0,1,0,.25))
+radarchart(df_SG_radarchart,
+           title = "Shots Gained Metrics for Professional Golfers",
+           axistype = 1,
+           caxislabels = c("-0.6","-0.3", "0", "0.3", "0.6"),
+           plty=1,
+           pcol=2:3,
+           pfcol = areas)
+legend("topright",
+       legend = c("Not Top 50 Players", "Top 50 Players"),
+       bty="n", pch=20, col=areas,
+       text.col = "black", pt.cex = 2)  
+```
+
+## Cluster Analysis
+
+```{r}
+df_clusters <- df_summarized |> 
+  select(Player_initial_last, mean_sg_ott, mean_sg_app, mean_sg_arg,
+         mean_sg_putt) |> 
+  na.omit()
+df_summarized <- df_summarized |> 
+  mutate(three_tiers = ifelse(mean_WGR <= 50, "top_50",
+                              ifelse(mean_WGR <= 100, "top_100", 
+                                     "outside_100")))
+```
+
+```{r}
+set.seed(90283)
+cluster_strokes_gained <- kmeans(df_clusters |> 
+                                   select(-Player_initial_last),
+                                 centers = 3, nstart = 20)
+cluster_strokes_gained
+```
+
+```{r}
+df_cl_results <- df_clusters |> 
+  mutate(clusters = cluster_strokes_gained$cluster) |> 
+  left_join(df_summarized)
+table(df_cl_results$clusters, df_cl_results$three_tiers)
+```
+
+## Research Block: Does Par on a Hole Matter?
+## Lab: Simulating the Cut
+
+## Case Study: Ranking Golfers from Different Tours Against Each Other
+
+## Exercises
