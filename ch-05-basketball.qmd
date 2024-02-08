@@ -1,0 +1,395 @@
+# Basketball
+
+```{r}
+#| include: false
+
+Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 2)
+```
+
+## R Packages
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(ISAR)
+library(lubridate)
+library(mgcv)
+```
+
+```{r}
+library(gganimate) # works with ggplot2 to create animations
+library(nbastatR) # access NBA data through the league's official API
+library(sportyR) # ggplot-scaled representations of sport fields/courts
+library(gifski) # converts images to GIF animations
+library(wehoop) # access women's basketball play by play data
+library(tidyr) # pivots and nests data
+library(teamcolors) # the color palletes for pro sports teams
+```
+
+
+## If You Don’t Know Anything About Basketball
+
+## Basic Basketball Metrics
+
+## Four Factors
+
+```{r}
+games <- nba_games_2023 |> 
+  mutate(fg2m = fgm - fg3m, #explicitly separate 2 and 3 point baskets
+         efg = (fg2m + 1.5*fg3m)/(fga))
+```
+
+```{r}
+#| label: fig-efgp-calcs
+#| fig-cap: "The effective field goal percentage from our calculations (x) versus what is reported on NBA.com (y)."
+
+df_merge <- dplyr::left_join(games, nba_adv_team_2023,
+                             by = c("team_id", "team_abbreviation", "game_id", "min"))
+p <- ggplot(data = df_merge,
+            aes(x = efg, y = efg_pct))
+p + geom_point(alpha = .5) + 
+  labs(title = "Comparing our calculated EFG to NBA.com's EFG",
+       x = "EFG (Our Calculation)",
+       y = "EFG (From NBA.com)") +
+  theme_bw()
+```
+```{r}
+df_merge <- df_merge |> 
+  mutate(tpp = tov/poss)
+```
+
+
+```{r}
+left_join(nba_games_2023, nba_ff_team_2023,
+                 by = c("team_id", "team_abbreviation", "game_id", "min")) |> 
+  mutate(ftr = fta/fga) |> 
+  select(fta_rate, ftr) |> 
+  head()
+```
+
+## Densities, Percentiles, and Z Scores
+
+```{r}
+#| label: fig-efgp-density
+#| fig-cap: "A density plot of effective field goal percentage."
+p <- ggplot(data = nba_adv_team_2023,
+            aes(x = efg_pct))
+p + geom_density() +
+  labs(title = "2023 NBA EFG",
+       x = "Effective Field Goal Percentage") +
+  theme_bw()
+```
+
+```{r}
+mean(nba_adv_team_2023$efg_pct, na.rm = T) 
+```
+
+```{r}
+#| label: fig-efgp-dens-mean
+#| fig-cap: "A density plot of effective field goal percentage along with the mean reference line."
+
+p + geom_density() +
+  geom_vline(xintercept = mean(nba_adv_team_2023$efg_pct, na.rm = T), 
+             linetype = "dashed") +
+  labs(x = "Effective Field Goal Percentage") +
+  theme_bw()
+```
+
+```{r}
+df_pivot <- df_merge |> 
+  left_join(nba_ff_team_2023,
+            by = c("team_id", "team_abbreviation", "game_id", "min")) |> 
+  mutate(win = ifelse(plus_minus > 0, TRUE, FALSE),
+         efg_pct = efg_pct.x,
+         tov_pct = tm_tov_pct.x/100,
+         oreb_pct = oreb_pct.x) |> 
+  select(efg_pct, oreb_pct, tov_pct, fta_rate, win) |> 
+  pivot_longer(cols = 1:4)
+```
+
+```{r}
+#| label: fig-ff-dens
+#| fig-cap: "Density plots of the four factors for the 2023 season."
+
+p <- ggplot(data = df_pivot, 
+            aes(x = value)) 
+p + geom_density() + 
+  facet_wrap(~ name, ncol = 2) +
+  labs(x = "NBA Four Factors (2023 Season)") +
+  theme_bw()
+```
+
+```{r}
+#| label: fig-ff-dens-wl
+#| fig-cap: "Density plots of the four factors by wins and losses for the 2023 season."
+
+p <- ggplot(data = df_pivot, 
+            aes(x = value, fill = win)) 
+p + geom_density(alpha = .25) + 
+  facet_wrap(~ name, ncol = 2) +
+  scale_fill_brewer(palette = "Set1") +
+  theme_bw()
+```
+
+## Specific Game Evaluation 
+
+```{r}
+den_lal_id <- nba_games_2023 |> 
+  dplyr::filter(game_date == ymd("2022-12-16"),
+                team_abbreviation %in% c("LAL", "DEN")) |> 
+  dplyr::pull(game_id) 
+
+den_lal_adv <- nba_adv_team_2023 |> 
+  dplyr::filter(game_id == den_lal_id[1]) 
+```
+
+```{r}
+#| label: fig-efgp-dens-den-lal
+#| fig-cap: "Effective field goal percentage density plot from the 2023 season along with the specific values from the Denver Nuggets @ Los Angeles Lakers game on December 6, 2022."
+
+p <- ggplot(data = nba_adv_team_2023, 
+            aes(x = efg_pct)) 
+p + geom_density() + 
+  geom_vline(data = den_lal_adv, 
+             aes(xintercept = efg_pct, col = team_abbreviation)) + 
+  guides(col = guide_legend("team")) +
+  scale_color_manual(values = c("#4D90CD", "#FDB927")) +
+  labs(title = "Nuggets @ Lakers 12/6/2022 EFG vs 2022-23 NBA Averages",
+       x = "Effective Field Goal Percentage") +
+  theme_bw() 
+```
+
+```{r}
+#| label: fig-oreb-dens-den-lal
+#| fig-cap: "Offensive rebounding percentage density plot from the 2023 season along with the specific values from the Denver Nuggets @ Los Angeles Lakers game on December 6, 2022."
+
+p <- ggplot(data = nba_adv_team_2023, 
+            aes(x = oreb_pct)) 
+
+p + geom_density() +  
+  geom_vline(data = den_lal_adv, 
+             aes(xintercept = oreb_pct, col = team_abbreviation)) +  
+  guides(col = guide_legend("team")) +
+  scale_color_manual(values = c("#4D90CD", "#FDB927")) +
+  labs(title = "Nuggets @ Lakers 12/6/2022 OREB vs 2022-23 NBA Averages",
+       x = "Offensive Rebound Percentage") +
+  theme_bw()
+```
+
+```{r}
+#| eval: false
+#| include: false
+
+tc <- teamcolors |> 
+  filter(name == c("Denver Nuggets")) 
+cutoff <- den_lal_adv$efg_pct[2] 
+tmp <- density(nba_adv_team_2023$efg_pct) 
+tmp <- data.frame(x = tmp$x, y = tmp$y) |>  
+  dplyr::mutate(shade = (x >= cutoff)) 
+
+p <- ggplot(data = tmp, 
+            aes(x = x, ymin = 0, ymax = y, fill = shade))
+p + geom_ribbon() + 
+  geom_line(aes(y = y)) + 
+  geom_vline(xintercept = cutoff, color = 'navy', linetype = "dashed") +  
+  scale_fill_manual(values = c(tc$primary, tc$secondary)) +  
+  annotate(geom = 'text', x = cutoff, y = 6, color = 'black', 
+           label = 'DEN EFG', hjust = -0.1) +  
+  guides(fill = "none") + 
+  labs(x = "effective field goal percentage", y = "density") + 
+  theme_bw() 
+```
+
+## Computing Estimated Probabilities 
+
+```{r}
+ecdf(nba_adv_team_2023$efg_pct)(den_lal_adv$efg_pct) 
+```
+
+## Z-Scores
+
+```{r}
+(den_lal_adv$oreb_pct - mean(nba_adv_team_2023$oreb_pct)) /
+  sd(nba_adv_team_2023$oreb_pct)
+```
+
+```{r}
+z_vals <- pnorm((den_lal_adv$oreb_pct -
+                   mean(nba_adv_team_2023$oreb_pct)) / 
+                  sd(nba_adv_team_2023$oreb_pct)) 
+names(z_vals) <- den_lal_adv$team_abbreviation 
+z_vals
+```
+
+## Using the Four Factors to Predict Wins and Losses 
+
+```{r}
+df_reg <- df_merge |> 
+  dplyr::left_join(nba_ff_team_2023,
+                   by = c("team_id", "team_abbreviation", "game_id", "min")) |> 
+  dplyr::mutate(win = ifelse(plus_minus > 0, TRUE, FALSE),
+                efg_pct = efg_pct.x,
+                tov_pct = tm_tov_pct.x/100,
+                oreb_pct = oreb_pct.x) |> 
+  dplyr::select(efg_pct, oreb_pct, tov_pct, fta_rate, win)
+
+adv_glm <- glm(win ~ ., 
+               data = df_reg, 
+               family = "binomial")
+summary(adv_glm)
+```
+
+```{r}
+#| eval: false
+
+adv_glm <- glm(win ~ efg_pct + oreb_pct + tov_pct + fta_rate, 
+               data = df_reg, 
+               family = "binomial")
+```
+
+___
+
+## Research Block: Is the season over after 20 games in the NBA?
+## Shot Charts
+
+```{r}
+#| eval: false
+Sys.setenv("VROOM_CONNECTION_SIZE" = 131072 * 2)
+```
+
+```{r}
+#| eval: false
+nba_mavs_shots <- teams_shots(teams = "Dallas Mavericks", seasons = 2023)
+```
+
+```{r}
+#| label: fig-jokic-23
+#| fig-cap: "Shot chart for the Denver Nuggets' center, Nikola Jokić."
+#| out-width: 90%
+
+player_name <- "Nikola Jokic"
+p <- geom_basketball(league = "NBA", 
+                     display_range = "defense",
+                     color_updates = list(
+                     defensive_half_court = "white",
+                     offensive_half_court = "white",
+                     court_apron = "white",
+                     center_circle_fill = "white",
+                     two_point_range = "white",
+                     painted_area = "white",
+                     free_throw_circle_fill = "white",
+                     basket_ring = "black")) 
+p + geom_point(data = nba_nuggets_shots |> 
+                 filter(namePlayer == player_name,
+                        yearSeason == 2023,
+                        zoneBasic != "Backcourt"),
+               aes(y = locationX/10, 
+                   x = (locationY - 420)/10), 
+               alpha = .25)  +
+               labs(title = "2022-23 Shot Attempts for Nikola Jokic")
+```
+
+
+```{r}
+#| label: fig-jokic-23-shape
+#| fig-cap: "Shot chart for the Denver Nuggets' center, Nikola Jokić. Here we specify different colors based on the zone in which the shot was taken."
+#| out-width: 90%
+
+player_name <- "Nikola Jokic"
+p <- geom_basketball(league = "NBA", 
+                     display_range = "defense",
+                     color_updates = list(
+                     defensive_half_court = "white",
+                     offensive_half_court = "white",
+                     court_apron = "white",
+                     center_circle_fill = "white",
+                     two_point_range = "white",
+                     painted_area = "white",
+                     free_throw_circle_fill = "white",
+                     basket_ring = "black")) 
+p + geom_point(data = nba_nuggets_shots |> 
+                 filter(namePlayer == player_name,
+                        yearSeason == 2023,
+                        zoneBasic != "Backcourt"),
+               aes(y = locationX/10, 
+                   x = (locationY - 420)/10,
+                   col = zoneBasic), 
+               alpha = .25) +
+               labs(title = "2022-23 Shot Attempts for Nikola Jokic by Zone", shape = "") 
+```
+```{r}
+df <- load_wnba_pbp(2022) |>
+  filter((home_team_name == "Seattle" |
+            away_team_name == "Seattle"),
+         shooting_play == "TRUE",
+         !grepl("Free", type_text),
+         coordinate_y < 45)
+```
+
+```{r}
+#| label: fig-storm-22-shape
+#| fig-cap: "Shot chart for the Seattle Storm. Here we specify different colors based on either a make or a miss."
+#| out-width: 100%
+
+p <- geom_basketball(league = "WNBA", 
+                     display_range = "defense",
+                     color_updates = list(
+                     defensive_half_court = "white",
+                     offensive_half_court = "white",
+                     court_apron = "white",
+                     center_circle_fill = "white",
+                     two_point_range = "white",
+                     painted_area = "white",
+                     free_throw_circle_fill = "white",
+                     basket_ring = "black")) 
+p + geom_point(data = df,
+               aes(x = coordinate_x, y = coordinate_y,
+                   col = as.factor(scoring_play)),
+               alpha = .15) +
+  labs(title = "2022 Seattle Storm shot chart", 
+       color = "Made Shot?") +
+  scale_color_brewer(palette = "Set1")
+```
+
+```{r}
+#| label: fig-bird-stewart
+#| fig-cap: "Shot charts for the Breanna Stewart and Sue Bird during the 2022 season."
+#| out-width: 90%
+
+df_box <- load_wnba_player_box(2022) 
+
+df_player <- df_box |>  
+  filter(team_short_display_name == "Storm") |> 
+  select(athlete_display_name, athlete_id, team_short_display_name) |>  
+  distinct()
+
+df_storm <- left_join(df,
+                      df_player,
+                      by = c("athlete_id_1" = "athlete_id"))
+
+p + geom_point(data = df_storm |>  
+                 filter(athlete_display_name %in% 
+                          c("Sue Bird", "Breanna Stewart")),
+               aes(x = coordinate_x, y = coordinate_y),
+               alpha = .15) +
+  facet_wrap(~ athlete_display_name, ncol = 2) +
+  labs(caption = "",
+       title = "Shot charts for Breanna Stewart and Sue Bird in 2022") +
+  theme(legend.position = "bottom") 
+```
+
+```{r}
+df_liberty <- df_box |>
+  group_by(team_name, athlete_display_name) |> 
+  summarize(ppg = mean(points, na.rm = T)) |> 
+  filter(team_name == "Liberty") |> 
+  arrange(desc(ppg))
+df_liberty
+```
+
+## Lab Five: NBA Shots and Animation
+
+## Case Study: Should We Trust The Process?  Evaluating Talent in the NBA Before They Arrive
+
+## Exercises
+
