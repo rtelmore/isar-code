@@ -1,0 +1,143 @@
+# Web Scraping
+
+```{r}
+#| include: true
+
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+#| include: true
+
+library(xml2) # allows us to interact with webpages by parsing XML
+library(rvest) # helps us to harvest (scrape) data from web pages
+library(janitor) # a set of tools to examine and clean dirty data
+```
+```{r}
+#| include: false
+
+library(gt)
+```
+
+## Getting Sports Data 
+## Web Scraping and Ethics 
+
+## Web Document Structure
+
+## Web Scraping in R
+
+## Scraping NHL Data
+
+```{r}
+team <- "COL" 
+year <- 2023 
+url <- paste("http://www.hockey-reference.com/teams/", 
+             team,  
+             "/", 
+             year,  
+             ".html",  
+             sep = "") 
+pg <- read_html(url)  
+ 
+tables <- pg |> 
+  html_table()
+```
+
+```{r}
+#| cache: true
+
+links <- pg |>
+  html_nodes(xpath = '//*[(@id = "roster")]//a') |>
+  html_attr('href')
+```
+
+```{r}
+#| cache: true
+
+url <- paste("https://www.hockey-reference.com", links[27], sep = "")
+mac_tbs <- rvest::read_html(url) |> 
+  rvest::html_table() 
+mac_tb <- mac_tbs[[3]]
+mac_tb <- mac_tb |> 
+  janitor::clean_names() |> 
+  dplyr::filter(!(season %in% c("Career", "82 Game Avg.")))
+```
+
+```{r}
+#| cache: true
+
+get_hrc_player_links <- function(team, year = 2023){
+  url <- paste("https://www.hockey-reference.com/teams/", 
+               team, 
+               "/", 
+               year, 
+               ".html", 
+               sep = "")
+  pg <- read_html(url) 
+  links <- pg |>
+    html_nodes(xpath = '//*[(@id = "roster")]//a') |>
+    html_attr('href')
+  teams_data <- pg |> 
+    html_table() 
+  teams_data <- teams_data[[3]] |> 
+    bind_cols(tibble(links = links))
+  return(teams_data)  
+}
+
+col_data <- get_hrc_player_links("COL", year = 2023)
+```
+
+```{r}
+#| include: false
+
+if(year == 2023){
+  teams_data <- pg |> 
+    html_table() 
+  teams_data <- teams_data[[3]] |> 
+    bind_cols(tibble(links = links))
+} else {
+  teams_data <- pg |> 
+    html_table() 
+  teams_data <- teams_data[[3]] |> 
+    bind_cols(tibble(links = links))
+}
+```
+
+## Writing a Custom Function
+
+```{r}
+get_nhl_roster <- function(team, season = 2023){ 
+  url <- paste("http://www.hockey-reference.com/teams/",  
+               team, "/", season, ".html", sep = "") 
+  tb <- read_html(url) |> 
+    html_table() 
+  tb <- tb[[3]]
+  return(tb) 
+} 
+```
+
+```{r}
+#| cache: true
+
+col_df <- get_nhl_roster(team = "COL", season = 2023) 
+```
+```{r}
+
+teams <- c("COL", "DAL") 
+years <- 2022:2023
+for(i in seq_along(teams)){ 
+  for(j in seq_along(years)){ 
+    tb <- get_nhl_roster(teams[i], years[j]) |> 
+      mutate(team = teams[i],  
+             year = years[j]) 
+    if(exists("results")){ 
+      results <- rbind(results, tb) 
+    } else (results <- tb) 
+  } 
+} 
+```
+
+## Conclusion
+## Lab Three: Web Scraping Hockey Data 
+## Exercises
