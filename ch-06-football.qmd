@@ -1,0 +1,512 @@
+# Football 
+
+## R Packages
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+library(ISAR)
+library(tidyr)
+library(mgcv)
+library(teamcolors)
+```
+
+```{r}
+library(nflfastR) #functions to access NFL play by play data
+library(NFLSimulatoR) #used to simulate plays or drives in NFL games
+```
+
+## If you don’t know anything about Football
+
+## Why Football Analytics?
+
+## The Coach’s Dilemma: What to do on Fourth Down?
+
+## Expected Points
+
+## Play-by-Play Data
+
+```{r}
+df <- load_pbp(seasons = 2013:2022)
+```
+
+```{r}
+field_goals <- df |> 
+  filter(play_type == "field_goal", season_type == "REG") |> 
+  select(game_date, time, down, yrdln, ydstogo, yardline_100, posteam, 
+         defteam, field_goal_result, field_goal_attempt,
+         game_seconds_remaining, ep, contains("prob"), game_id) |> 
+  mutate(success = ifelse(field_goal_result == "made", 1, 0),
+         fg_distance = yardline_100 + 17) |> 
+  na.omit()
+```
+
+```{r}
+first_downs <- df |> 
+  filter(down == 1, ydstogo == 10, ep != 0)
+```
+
+## Field Goal Success vs. Distance
+
+```{r}
+#| label: fig-fg-density
+#| fig-cap: "The density estimates for field goal distance for made versus missed field goals."
+
+p <- ggplot(data = field_goals,
+            aes(x = fg_distance, fill = as.factor(success)))
+p + geom_density(alpha = .75) + 
+  scale_fill_brewer("success", palette = "Set1") +
+  labs(title = "Made vs Missed NFL Field Goal Attempts, 2013-2022", 
+       x = "distance") +
+  theme_bw()
+
+```
+
+```{r}
+fg_glm <- glm(success ~ fg_distance,
+              family = "binomial",
+              data = field_goals)
+summary(fg_glm)
+```
+
+```{r}
+#| label: fig-fg-distance
+#| fig-cap: "The estimated probability of making a field goal as a function of distance in the National Football League."
+
+p <- ggplot(data = field_goals,
+            aes(x = fg_distance, y = success))
+p + geom_point(alpha = .1) +
+  geom_smooth(method = "glm", method.args = list(family = "binomial")) +
+  labs(title = "Probability of a Successful FG Attempt, NFL 2013-2022",
+       x = "distance",
+       y = "probability of successful field goal") +
+  theme_bw()
+```
+
+```{r}
+fg_gam <- gam(success ~ s(fg_distance),
+              family = "binomial",
+              data = field_goals)
+summary(fg_gam)
+
+```
+
+```{r}
+field_goals <- mutate(field_goals, 
+                      glm_pred = predict(fg_glm, type = "response"),
+                      gam_pred = predict(fg_gam, type = "response"))
+```
+
+```{r}
+#| label: fig-fg-distance-all-models
+#| fig-cap: "The estimated probabilities of making a field goal as a function of distance in the National Football League. The solid line represents the estimate based on the nflfastR model, the dashed line is the GLM model fit, and the dotted line is the GAM model fit."
+
+p <- ggplot(data = field_goals,
+            aes(x = fg_distance, y = fg_prob))
+p + geom_smooth(col = "black", se = F) +
+  geom_line(aes(x = fg_distance, y = glm_pred), 
+              linetype = "dashed", col = "black") +
+  geom_line(aes(x = fg_distance, y = gam_pred), 
+              linetype = "dotted", col = "black") +
+  labs(x = "distance",
+       y = "probability") +
+  theme_bw()
+```
+## Decision Making and Expected Points
+
+```{r}
+predict(fg_glm, newdata = data.frame(fg_distance = 50),
+        type = "response")
+predict(fg_gam, newdata = data.frame(fg_distance = 50),
+        type = "response")
+
+```
+```{r}
+filter(field_goals, fg_distance == 50) |> 
+  summarize(m = mean(ep))
+```
+
+```{r}
+filter(first_downs, yardline_100 == 31) |> 
+  summarize(mean(ep))
+```
+
+```{r}
+filter(first_downs, yardline_100 == 68) |> 
+  summarize(mean(ep))
+```
+
+## Simulation
+
+```{r}
+sample_play <- function(down, 
+                        yards_to_go, 
+                        yard_line, 
+                        play_by_play_data){
+  tmp <- filter(play_by_play_data,
+                play_type %in% c("pass", "run"),
+                down == down,
+                ydstogo == yards_to_go,
+                yardline_100 == yard_line) |> 
+    sample_n(size = 1)
+  return(tmp)
+}
+
+sample_play_needs_td <- function(down, 
+                                 yards_to_go, 
+                                 yard_line,
+                                 play_by_play_data){
+  down_original <- down
+  if (yard_line >= 95){yard_line <- 95}
+  if (down == 4 & yards_to_go >= 3){down <- 3}
+  if (yards_to_go >= 20){yards_to_go <- 20}
+  
+  sim_play <- sample_play(down = down,
+                          yards_to_go = yards_to_go,
+                          yard_line = yard_line,
+                          play_by_play_data = play_by_play_data)
+  
+  yards_gained <- sim_play$yards_gained
+  new_yard_line <- yard_line - yards_gained
+  new_down <- ifelse(yards_gained >= yards_to_go, 1, down_original + 1)
+  new_distance <- ifelse(yards_gained >= yards_to_go & new_yard_line >= 10,
+                         10,
+                         ifelse(yards_gained >= yards_to_go & 
+                                  new_yard_line < 10, 
+                                new_yard_line, 
+                                yards_to_go - yards_gained))
+  if(new_distance <= 0){new_distance <- 1}
+  if(new_yard_line < 0){new_yard_line <- 1}
+  return(data.frame(down_original, 
+                    yards_to_go, 
+                    yard_line, 
+                    yards_gained, 
+                    new_yard_line = yard_line - yards_gained, 
+                    new_down, 
+                    new_distance, 
+                    turnover = sim_play$turnover, 
+                    td_offense = sim_play$td_offense, 
+                    end_drive = new_down > 4 | 
+                      sim_play$turnover | sim_play$td_offense,
+                    play = sim_play$desc))
+}
+
+sample_drive <- function(yard_line, 
+                         play_by_play_data){
+  
+  drive_store <- NULL
+  new_down <- 1
+  new_distance <- 10
+  new_yard_line <- yard_line
+  end_of_drive <- FALSE
+  play_num <- 1
+  
+  while(!end_of_drive){
+    run_play <- sample_play_needs_td(down = new_down, 
+                                     yards_to_go = new_distance, 
+                                     yard_line = new_yard_line,
+                                     play_by_play_data = play_by_play_data)
+    run_play$play_num <- play_num
+    drive_store <- bind_rows(drive_store, run_play)
+    new_down <- run_play$new_down
+    new_distance <- run_play$new_distance
+    new_yard_line <- run_play$new_yard_line
+    end_of_drive <- run_play$end_drive
+    play_num <- play_num + 1
+  }
+  return(drive_store)
+}
+```
+
+```{r}
+nfl_pbp <- load_pbp(seasons = 2021:2022)
+```
+
+```{r}
+nfl_pbp_df <- mutate(nfl_pbp,
+                     is_fumble = !is.na(fumble_recovery_1_team),
+                     turnover = grepl("INTERCEPTED", desc) |
+                       (is_fumble & fumble_recovery_1_team != posteam),
+                     td_offense = rush_touchdown | pass_touchdown) %>%
+  filter(!is.na(yards_gained))
+```
+
+```{r}
+set.seed(2023)
+nSim <- 100
+yard_line_start <- 75
+
+for (i in 1:nSim){
+  if(i %% 20 == 0){
+    cat(sprintf('Drive: %s at %s\n', i, Sys.time()))
+  }
+  tmp_result <- suppressWarnings(sample_drive(yard_line_start, nfl_pbp_df))
+  tmp_result$sim <- i
+  if(exists("results")){
+    results <- suppressWarnings(bind_rows(results, tmp_result))
+  }
+  else(results <- tmp_result)
+}
+
+```
+
+```{r}
+results |> 
+  filter(end_drive == TRUE) |> 
+  summarize(tos_pct = sum(turnover)/nSim,
+            td_pct = sum(td_offense)/nSim) |> 
+  mutate(to_downs_pct = 1 - tos_pct - td_pct)
+```
+
+```{r}
+results |> 
+  filter(end_drive == TRUE) |> 
+  summarize(ppd = mean(play_num))
+```
+
+```{r}
+#| label: fig-num-plays-hist
+#| fig-cap: "Histogram showing the distribution for number of plays per drive in the simulated data set."
+
+p <- results |> 
+  filter(end_drive == TRUE) |> 
+  ggplot(aes(x = play_num))
+p + geom_histogram() +
+  labs(title = "Mean plays per NFL drive, without kicking, simulated 100 times",
+       x = "number of plays on drive") +
+  theme_bw()
+```
+
+```{r}
+results |> 
+  filter(end_drive == TRUE) |> 
+  group_by(td_offense) |> 
+  summarize(ppd = mean(play_num))
+```
+
+```{r}
+#| label: fig-num-plays-by-td-hist
+#| fig-cap: "Histogram showing the distribution for number of plays per drive in the simulated data set. The bars are colored by whether or not the drive ended in a touchdown."
+
+p <- ggplot(data = filter(results, end_drive == TRUE),
+            aes(x = play_num, fill = td_offense))
+p + geom_histogram() +
+  scale_fill_brewer("TD?", palette = "Set1") +
+  labs(title = "Mean plays per NFL drive, without kicking, simulated 100 times",
+       x = "number of plays on drive") +
+  theme_bw()
+```
+
+```{r}
+#| label: fig-num-plays-facet-hist
+#| fig-cap: "Histograms showing the distribution for number of plays per drive in the simulated data set facetted by whether or not the drive ended in a touchdown."
+
+p <- ggplot(data = filter(results, end_drive == TRUE),
+            aes(x = play_num))
+p + geom_histogram() +
+  facet_grid(~ td_offense) +
+  guides(fill = "none") +
+  labs(title = "Mean plays per NFL drive, without kicking, simulated 100 times",
+       x = "number of plays on drive") +
+  theme_bw()
+```
+
+## Research Block: Using analytics for evaluating defensive players
+## Win Probabilities
+
+```{r}
+nfl_playoffs_pbp <- load_pbp(seasons = 2019) |> 
+  filter(season_type == "POST", home_team == "KC", away_team == "HOU") |> 
+  select(game_seconds_remaining, away_wp, away_wp_post, home_wp, 
+         home_wp_post, wp, desc, home_team, away_team)
+```
+
+```{r}
+#| label: fig-kc-wp
+#| fig-cap: "Kansas City Chiefs win probability versus the Houston Texans from the 2019-20 season playoffs."
+
+p <- ggplot(data = nfl_playoffs_pbp,
+            aes(x = 3600 - game_seconds_remaining, 
+                y = home_wp))
+p + geom_line() +
+  geom_point() +
+  labs(title="KC win probability, Chiefs vs. Texans, Jan 12 2020",
+       x = "game time (seconds)",
+       y = "Kansas City win probability") +
+  theme_bw()
+```
+
+```{r}
+#| label: fig-kc-wp-tc
+#| fig-cap: "Kansas City Chiefs win probability versus the Houston Texans from the 2019-20 season playoffs. The point colors above and below 0.5 are colored according to Kansas City's and Houston's primary team color."
+
+tc <- teamcolors |> 
+  filter(name %in% c("Kansas City Chiefs", "Houston Texans")) |> 
+  mutate(team = c("HOU", "KC")) 
+## Note the single = because this is an assignment and not a logical comparison
+##  as in a filter or select.
+
+g1 <- nfl_playoffs_pbp |> 
+  filter(home_team == "KC", away_team == "HOU") |> 
+  select(game_seconds_remaining, away_wp, away_wp_post, home_wp, 
+         home_wp_post, wp, desc) |> 
+  mutate(team = ifelse(home_wp < .5, "HOU", "KC")) |> 
+  left_join(tc, by = "team") |> 
+  na.omit()
+
+p <- ggplot(data = g1,
+            aes(x = 3600 - game_seconds_remaining, 
+                y = home_wp,
+                col = name))
+p + geom_line(col = "darkgrey", linetype = 2) +
+  geom_point() +
+  scale_color_teams(name = "name") +
+  scale_y_continuous(limits = c(0, 1)) +
+  scale_x_continuous(limits = c(0, 3600),
+                     breaks = seq(0, 3600, by = 900),
+                     labels = c("Q1", "Q2", "Q3", "Q4", "FT")) +
+  labs(
+    title="KC win probability, Chiefs vs. Texans, Jan 12 2020",
+    x = "time in game",
+    y = "Kansas City win probability"
+  ) +
+  guides(col = "none") +
+  theme_bw()
+
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| output: false
+
+week_11_ids <- fast_scraper_schedules(2022) |> 
+  filter(week == 11)
+tc <- teamcolors |> 
+  filter(name %in% c("Kansas City Chiefs", "Los Angeles Chargers")) |> 
+  mutate(team = ifelse(name == "Kansas City Chiefs", "KC", "LAC"))
+
+kc_at_lac_pbp <- week_11_ids |> 
+  filter(home_team == "LAC") |> 
+  pull(game_id) |> 
+  fast_scraper()
+```
+
+```{r}
+#| label: fig-kc-lac
+#| fig-cap: "Los Angeles Chargers win probability versus the Kansas City Chiefs from the 2022-23 season playoffs."
+
+kc_at_lac_pbp_tc <- kc_at_lac_pbp |> 
+  mutate(team = ifelse(home_wp < .5, "KC", "LAC")) |> 
+  left_join(tc, by = "team") |> 
+  filter(!is.na(team))
+
+p <- ggplot(data = kc_at_lac_pbp_tc,
+            aes(x = 3600 - game_seconds_remaining, 
+                y = home_wp,
+                col = name))
+p + geom_line(col = "darkgrey", linetype = 2) +
+  geom_point() +
+  scale_color_teams() +
+  scale_y_continuous(limits = c(0, 1)) +
+  scale_x_continuous(limits = c(0, 3600),
+                     breaks = seq(0, 3600, by = 900),
+                     labels = c("Q1", "Q2", "Q3", "Q4", "FT")) +
+  labs(
+    x = "time in game (s)",
+    y = "LAC win probability",
+    title = "Win Probability: KC @ LAC, week 11 2022"
+  ) +
+  guides(col = "none") +
+  theme_bw()
+```
+
+```{r}
+#| label: fig-kc-lac-both
+#| fig-cap: "Los Angeles Chargers and Kansas City Chiefs win probabilities from the 2022-23 season playoffs."
+
+kc_at_lac_pbp_tc <- kc_at_lac_pbp |> 
+  mutate(home_team_color = teamcolors |> 
+           filter(name == "Los Angeles Chargers") |> 
+           pull(primary),
+         away_team_color = teamcolors |> 
+           filter(name == "Kansas City Chiefs") |> 
+           pull(primary)) |> 
+  filter(!is.na(home_wp))
+
+p <- ggplot(data = kc_at_lac_pbp_tc,
+            aes(x = 3600 - game_seconds_remaining, 
+                y = home_wp))
+p + geom_line(color = kc_at_lac_pbp_tc$home_team_color[1]) +
+  geom_line(aes(x = 3600 - game_seconds_remaining, 
+                y = away_wp),
+            color = kc_at_lac_pbp_tc$away_team_color[1]) +
+  scale_y_continuous(limits = c(0, 1)) +
+  scale_x_continuous(limits = c(0, 3600),
+                     breaks = seq(0, 3600, by = 900),
+                     labels = c("Q1", "Q2", "Q3", "Q4", "FT")) +
+  labs(
+    x = "time in game",
+    y = "win probability",
+    title = "Win Probability: KC @ LAC, week 11 2022"
+  ) +
+  guides(col = "none") +
+  theme_bw()
+```
+
+## Simulation with NFLSimulatoR
+
+```{r}
+nfl_pbp_sim <- prep_pbp_data(nfl_pbp)
+```
+
+```{r}
+#| code-overflow: wrap
+
+set.seed(3)
+play <- NFLSimulatoR::sample_play(
+  what_down = 1,
+  yards_to_go = 10,
+  yards_from_own_goal = 45,
+  play_by_play_data = nfl_pbp_sim,
+  strategy = "normal"
+)
+play$desc
+```
+
+```{r}
+set.seed(98)
+drives <- NFLSimulatoR::sample_drives(
+  n_sims = 100,
+  from_yard_line = 25,
+  play_by_play_data = nfl_pbp_sim,
+  strategy = "fourth_downs",
+  fourth_down_strategy = "always_go_for_it",
+  single_drive = T,
+  progress = T #shows progress bar for simulations
+)
+```
+
+```{r}
+set.seed(101)
+drives_pr <- NFLSimulatoR::sample_drives(
+  n_sims = 100,
+  from_yard_line = 25,
+  play_by_play_data = nfl_pbp_sim,
+  strategy = "passes_rushes",
+  prop_passes = 0.25,
+  single_drive = T,
+  progress = T #shows progress bar for simulations
+)
+```
+
+```{r}
+group_by(drives_pr, play_type) |>  
+  summarize(n = n())
+```
+
+## Conclusion
+## Case Study: Overtime Strategy in the NFL
+
+## Exercises

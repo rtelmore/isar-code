@@ -1,0 +1,287 @@
+# Hockey
+
+## R Packages
+
+```{r}
+library(xml2)
+library(rvest)
+library(janitor)
+library(dplyr)
+library(sportyR)
+library(ISAR)
+library(ggplot2)
+```
+
+```{r}
+library(scales) # used for scaling data and providing good breaks and labels for graphs
+library(stringr) # helps when cleaning and working with string data
+library(hockeyR) # play-by-play data for NHL games
+```
+
+## If you don’t know anything about hockey 
+
+## What you will need to complete this chapter
+
+```{r}
+#| eval: false
+
+year <- "2023"
+link <- paste("http://moneypuck.com/moneypuck/playerData/seasonSummary/",
+              year, 
+              "/regular/skaters.csv",
+              sep = "")
+df <- read.csv(link)
+```
+
+## Exploring Ice Hockey through Basic and Advanced Statistics
+
+```{r}
+years <- 2012:2023
+for(i in seq_along(years)){
+  cat(sprintf('Year: %s at %s\n', years[i], Sys.time()))
+  reg_url <- paste("https://www.hockey-reference.com/leagues/NHL_", years[i],
+                   "_skaters.html", sep = "")
+  pg <- read_html(reg_url)
+  nhl_reg_stats <- rvest::html_table(pg, fill = TRUE)[[1]]
+  names(nhl_reg_stats) <- nhl_reg_stats[1, ]
+  nhl_reg_stats_2 <- janitor::clean_names(nhl_reg_stats) |> 
+    filter(rk != "Rk")
+  
+  adv_url <- paste("https://www.hockey-reference.com/leagues/NHL_", years[i],
+                   "_skaters-advanced.html", sep = "")
+  pg_2 <- read_html(adv_url) 
+  nhl_adv_stats <- rvest::html_table(pg_2, fill = TRUE)[[1]]
+  names(nhl_adv_stats) <- nhl_adv_stats[1, ]
+  nhl_adv_stats_2 <- janitor::clean_names(nhl_adv_stats) |> 
+    filter(rk != "Rk")
+    
+  tmp_results <- dplyr::inner_join(nhl_reg_stats_2, nhl_adv_stats_2) |> 
+    mutate(season = years[i]) |> 
+    select(-rk)
+  
+  if(exists("nhl_data")){
+    nhl_data <- dplyr::bind_rows(nhl_data, tmp_results)
+  }
+  else(nhl_data <- tmp_results)
+  
+}
+```
+
+```{r}
+nhl_data[, -c(1, 3, 4, 22, 41, 42)] <- sapply(nhl_data[, -c(1, 3, 4, 22, 41, 42)], 
+                                             as.numeric )
+```
+
+## *Corsi* and *Fenwick* metrics
+
+```{r}
+mac <- filter(nhl_data, player == "Nathan MacKinnon")
+```
+
+```{r}
+#| label: fig-mac-corsi
+#| fig-cap: "Corsi percentage values (y) by age (x) for Nathan MacKinnon of the Colorado Avalanche."
+
+p <- ggplot(data = mac,
+            aes(x = age, y = cf_percent/100))
+p + geom_line() +
+  geom_point() +
+  labs(x = "Age", y = "Corsi Percentage") +
+  scale_y_continuous(labels = scales::percent) +
+  scale_x_continuous(breaks = 18:28) +
+  theme_bw()
+```
+
+## Time On Ice (TOI) by Positions
+
+```{r}
+#| label: fig-toi
+#| fig-cap: "Density plots for Time on Ice by position."
+
+p <- ggplot(data = nhl_data |> 
+              mutate(toi = toi) |> 
+              filter(toi >= 200, 
+                     !(pos %in% c("F", "W"))),
+            aes(x = toi))
+p + geom_density(alpha = .25, fill = "grey20") +
+  facet_wrap(~ pos, nc = 2) +
+  labs(x = "Time on Ice (min)") +
+  theme_bw()
+```
+
+## Evaluating Players
+
+```{r}
+top_cor <- nhl_data |> 
+  filter(toi >= 200) |> 
+  group_by(season, pos) |> 
+  summarize(max_corsi = max(cf_percent)) |> 
+  arrange(desc(max_corsi))
+head(top_cor)
+```
+
+```{r}
+top_cor <- nhl_data |>
+  filter(toi >= 200) |>
+  group_by(season, pos) |>
+  filter(cf_percent == max(cf_percent)) |>
+  select(season, player, pos, tm, cf_percent) |>
+  arrange(desc(cf_percent))
+head(top_cor)
+```
+
+```{r}
+#| label: fig-corsi-pos
+#| fig-cap: "Average Corsi values over time by several positions."
+
+nhl_tmp <- nhl_data |>
+  filter(toi >= 200) |>
+  group_by(season, pos) |>
+  summarize(avg_corsi = mean(cf_percent))
+p <- ggplot(nhl_tmp,
+            aes(x = season, y = avg_corsi, col = pos))
+p + geom_line() +
+  geom_point() +
+  labs(y = "Average Corsi",
+       x = "Season",
+       linetype = "Position") +
+  scale_x_continuous(breaks = 2008:2023) +
+  scale_color_brewer("Position", palette = "Dark2") +
+  theme_bw()
+```
+
+## Research Block: Fighting in the NHL
+## Accessing the NHL API
+
+```{r}
+pbp_23 <- load_pbp('2022-23')
+```
+
+```{r}
+avs_pbp <- pbp_23 |> 
+  filter(event_team_abbr == "COL")
+```
+
+```{r}
+unique(avs_pbp$event)
+```
+
+```{r}
+avs_goals <- avs_pbp |> 
+  filter(event == "Goal")
+```
+
+```{r}
+#| label: fig-nhl-avs-game-goals
+#| fig-cap: "All shot locations with goals in Colorado Avalanche games from the 2022-23 season."
+
+nhl_rink <- geom_hockey('nhl')
+nhl_rink +
+  geom_point(data = avs_goals, 
+             aes(x = x_fixed, y = y_fixed), 
+             alpha = .5) +
+  labs(caption = "")
+```
+
+```{r}
+avs_goals_playoffs <- avs_goals |> 
+  filter(substr(game_id, 5, 6) == "03")
+```
+
+```{r}
+#| label: fig-nhl-avs-playoff-goals
+#| fig-cap: "All shot locations with goals in Colorado Avalanche playoff games from the 2022-23 season."
+
+nhl_rink <- geom_hockey('nhl')
+nhl_rink +
+  geom_point(data = avs_goals_playoffs, 
+             aes(x = x_fixed, y = y_fixed), 
+             alpha = 1) +
+  labs(caption = "")
+```
+
+
+
+## Shiny Application {#sec-shiny}
+
+```{r}
+#| eval: false
+#| include: true
+
+library(shiny)
+library(ISAR)
+library(ggplot2)
+library(plotly)
+```
+
+```{r}
+#| eval: false
+#| include: true
+
+df <- nhl_team_stats_2022 |> 
+  select(starts_with("stat"), team_name) |> 
+  rename_with(~ sub("stat_", "", .x), everything())
+```
+
+
+```{r}
+#| eval: false
+#| include: true
+
+ui <- fluidPage(
+
+    # Application title
+    titlePanel(div(HTML("Shiny Example for <em>Introduction to 
+                        Sports Analytics using R</em>"))),
+    # Sidebar with a slider input for number of bins 
+    sidebarLayout(
+        sidebarPanel(
+          selectInput("selector_x", h4("X Variable"), 
+                      choices = names(df)[2:31], 
+                      selected = "wins", 
+                      width = '190px'),
+          selectInput("selector_y", h4("Y Variable"), 
+                      choices = names(df)[2:31], 
+                      selected = "losses", 
+                      width = '190px'),
+          width = 3
+          ),
+
+        # Show a plot of the generated distribution
+        mainPanel(
+          plotlyOutput("graph")
+        )
+    )
+)
+```
+
+```{r}
+#| eval: false
+#| include: true
+
+server <- function(input, output, session) {
+
+  output$graph <- renderPlotly({
+    ggplotly(ggplot(data = df,
+                    aes_string(x = input$selector_x,
+                               y = input$selector_y),
+                    text = paste('X: ', input$selector_x, '\n',
+                                 'Y: ', input$selector_y, sep = "")) +
+               geom_point(aes(col = team_name)) +
+               theme_bw() +
+               labs(x = input$selector_x,
+                    y = input$selector_y,
+                    colour = "Teams"),
+             tooltip = "text")
+  })
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
+```
+
+## Case Study: Pulling the goaltender
+
+
+## Exercises
+
