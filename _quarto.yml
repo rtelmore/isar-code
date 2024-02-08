@@ -11,6 +11,11 @@ book:
     - ch-03-web-scraping.qmd
     - ch-04-baseball.qmd
     - ch-05-basketball.qmd
+    - ch-06-football.qmd
+    - ch-07-hockey.qmd
+    - ch-08-soccer.qmd
+    - ch-09-golf.qmd
+    - ch-10-wagering.qmd
 execute:
   eval: false
 format:

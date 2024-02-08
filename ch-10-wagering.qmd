@@ -1,0 +1,290 @@
+# Sport Wagering and Daily Fantasy Sports
+
+## R Packages
+
+```{r}
+library(ISAR)
+library(remotes)
+library(dplyr)
+library(janitor)
+library(bettoR)
+library(lpSolve)
+library(scales)
+library(ggplot2)
+```
+
+```{r}
+library(bettoR) #functions for wagering operations and calculations
+library(lpSolve) # solves linear, integer and mixed integer programs
+```
+
+```{r}
+#| eval: false
+
+remotes::install_github("a-i-sports/bettoR")
+```
+
+## If you don’t know anything about Sports Wagering
+
+
+## Sports Wagering and Morality
+
+## Sports Wagering and Legality
+
+## Basics of Sports Wagering
+
+## The role of the bookmaker
+
+```{r}
+#Federer Wins or Nadal Wins
+federer_exposure = 300
+nadal_exposure = 123.08
+bookmaker_profit_federer_wins = nadal_exposure - 
+  (federer_exposure/3) #federer backers had to lay 3 to 1 odds
+bookmaker_profit_nadal_wins = federer_exposure - 
+  (nadal_exposure * 2.25) # nadal backers receive 2.25 to 1 odds
+cat("When Federer wins, the bookmaker profits", 
+    bookmaker_profit_federer_wins)
+cat("When Nadal wins, the bookmaker profits", 
+    bookmaker_profit_nadal_wins)
+```
+
+```{r}
+# Nadal Wins
+300-(50*2.25)
+# Federer Wins
+50-(300/3)
+```
+
+## Popular Types of Wagers
+
+## Using Analytics to Set Market Prices
+## Displaying and Calculating Market Prices
+
+```{r}
+#| label: tbl-equiv-odds
+#| tbl-cap: Hypothetical tennis match odds in the various formats discussed in this chapter.  
+#| echo: false
+
+df <- data.frame(`Winner` = c("Federer", "Nadal"),
+                 `American` = c("-300", "+225"),
+                 `Decimal` = c(1.33, 3.25),
+                 `Fractional` = c(1/3, 9/4),
+                 `Probability` = c(0.75, 0.30))
+df |> 
+  gt() |> 
+  opt_row_striping()
+```
+
+
+```{r}
+implied_odds(0.75, type = "all")
+```
+
+```{r}
+hold_calc(-110, -110)
+```
+
+## Straight Wagers vs. Parlays
+```{r}
+side_wager = 10
+side_multiplier = 1.53 # -190 in decimal odds
+total_wager = 10
+total_multiplier = 1.91 #-110 in decimal odds
+payout = side_wager * side_multiplier + total_wager * total_multiplier
+profit = payout - side_wager - total_wager
+profit
+```
+
+```{r}
+convert_odds(-190)
+convert_odds(-110)
+```
+
+```{r}
+convert_odds(-190)[1]*convert_odds(-110)[1]
+```
+
+```{r}
+convert_odds(-190)[1]*convert_odds(-110)[1]*20
+```
+
+```{r}
+convert_odds(-190)[1]*convert_odds(-110)[1]*20 - 20
+```
+
+## Research Block 
+
+## Kelly Criterion
+
+
+```{r}
+0.6 - (0.4/1)
+```
+
+```{r}
+0.55 - (0.45/0.91)
+```
+
+```{r}
+kelly(win_prob = 0.55, odds = -110, type = "us")
+kelly(win_prob = 0.55, odds = 1.91, type = "dec")
+```
+
+```{r}
+kelly(win_prob = 0.54, odds = -110, type = "us")
+```
+
+```{r}
+kelly(win_prob = 0.53, odds = -110, type = "us")
+kelly(win_prob = 0.52, odds = -110, type = "us")
+```
+
+## Case Study: Stevin Smith, Tim Donaghy, and the issues of sports fixing 
+
+## Daily Fantasy Sports
+
+```{r}
+#| label: tbl-dk-skaters-pts
+#| tbl-cap: Draftkings points (skaters) for an NHL showdown game. 
+#| echo: false
+
+df <- data.frame(Statistics = c("Goal", "Assist", "Shot on Goal", "Blocked Shot",
+                                "Shorthanded Goal", "Faceoff Won", "Shootout Goal",
+                                "Hat Trick"),
+                 Points = c(8, 5, 2, 1.1, 2, 0.2, 1.5, 3))
+df |> 
+  gt::gt() |> 
+  gt::opt_row_striping()
+```
+
+```{r}
+#| label: tbl-dk-goalies-pts
+#| tbl-cap: Draftkings points (goalies) for an NHL showdown game. 
+#| echo: false
+
+df <- data.frame(Statistics = c("Win", "Save", "Goal Allowed", "Shutout"),
+                 Points = c(4, 0.5, -1, 4))
+df |> 
+  gt::gt() |> 
+  gt::opt_row_striping()
+```
+
+```{r}
+df <- dk_nyr_car |> 
+  filter(roster_position == "FLEX") #be sure we can include any player
+```
+
+```{r}
+obj <- df$avg_points_per_game
+```
+
+```{r}
+cons <- rbind(rep(1, nrow(df)),                       # player constraint
+              df$salary,                              # salary constraint
+              t(model.matrix(~ team_abbrev + 0, df))) # team constraints
+cons[1:4, 1:8] # to inspect the matrix
+```
+
+```{r}
+dir <- c("=", "<=", ">=", ">=")
+```
+
+```{r}
+rhs <- c(6, 50000, 1, 1)
+```
+
+```{r}
+result <- lpSolve::lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+result
+```
+
+```{r}
+team <- df[which(result$solution == 1), ] |> 
+  select(name, position, salary, team_abbrev)
+team
+```
+
+```{r}
+teams_mat <- t(model.matrix(~ team_abbrev + 0, df))
+goalies <- ifelse(df$position == "G", 1, 0)
+teams_goalies <- t(goalies * t(teams_mat))
+
+cons_tmp <- rbind(cons, teams_goalies)
+dir_tmp <- c(dir, "<=", "<=")
+rhs_tmp <- c(rhs, 1, 1)
+result <- lp("max", obj, cons_tmp, dir_tmp, rhs_tmp, all.bin = TRUE)
+team <- df[which(result$solution == 1), ] |> 
+  select(name, position, salary, team_abbrev, avg_points_per_game)
+team
+```
+
+```{r}
+sum(team$salary)
+```
+
+```{r}
+df_new <- df |>  
+  filter(position != "G" | name %in% c("Antti Raanta", "Igor Shesterkin"))
+obj <- df_new$avg_points_per_game
+cons <- rbind(rep(1, nrow(df_new)), # player constraints
+              df_new$salary, # salary constraints
+              t(model.matrix(~ team_abbrev + 0, df_new))) # team constraints
+dir <- c("=", "<=", ">=", ">=")
+rhs <- c(6, 50000, 1, 1)
+result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+team <- df_new[which(result$solution == 1), ] |> 
+    select(name, position, salary, team_abbrev, avg_points_per_game)
+team
+```
+
+```{r}
+results <- data.frame(P1 = rep(NA, 100),
+                      P2 = rep(NA, 100),
+                      P3 = rep(NA, 100),
+                      P4 = rep(NA, 100),
+                      P5 = rep(NA, 100),
+                      P6 = rep(NA, 100),
+                      points = rep(NA, 100),
+                      salary = rep(NA, 100))
+results[1, ] <- c(team$name, sum(team$avg_points_per_game), sum(team$salary))
+for (i in 1:99){ ## 99 will give us 100 total teams
+  cons <- rbind(cons,
+                result$solution)
+  dir <- c(dir, "<=")
+  rhs <- c(rhs, 5)
+  result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+  team <- df_new[which(result$solution == 1), ]
+  results[i+1, ] <- c(team$name, sum(team$avg_points_per_game), sum(team$salary))
+}
+```
+
+```{r}
+df <- dk_nyr_car |> 
+  filter(position != "G" | name %in% c("Antti Raanta", "Igor Shesterkin")) |>  
+  mutate(new_pts = ifelse(roster_position == "CPT",
+                          1.5*avg_points_per_game,
+                          avg_points_per_game))
+obj <- df$new_pts
+
+players_con <- t(model.matrix(~ name + 0, df))
+cons <- rbind(rep(1, nrow(df)), #6 players
+              df$salary, #<= 50000
+              t(model.matrix(~ team_abbrev + 0, df)), # >= one player / team
+              ifelse(df$roster_position == "CPT", 1, 0), # one captain
+              players_con)
+
+dir <- c("=", "<=", ">=", ">=", "=", rep("<=", dim(players_con)[1]))
+rhs <- c(6, 50000, 1, 1, 1, rep(1, dim(players_con)[1]))
+result <- lp("max", obj, cons, dir, rhs, all.bin = TRUE)
+team <- df[which(result$solution == 1), ] |> 
+    select(name, position, salary, team_abbrev, roster_position, 
+           avg_points_per_game)
+team
+```
+
+## Lab: Scraping Odds Data to Build Models
+## Conclusion
+
+## Exercises
+
